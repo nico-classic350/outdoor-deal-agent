@@ -71,7 +71,7 @@
     },
     {
       "path": "/api/batch/0",
-      "schedule": "35 10 * * *"
+      "schedule": "34 10 * * *"
     }
   ]
 }
