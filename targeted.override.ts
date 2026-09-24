@@ -45,7 +45,95 @@ function likelyProductText(s:string){
     !/(damen|women|girl|kinder|shorts?\b|zip[- ]?off|regenhose|hardshell|skihose|ski pants|bib\b)/i.test(s);
 }
 
+
+function parseEuroText(v:any):number|undefined{
+  if(v==null) return undefined;
+  const m=String(v).match(/(\d{1,4}(?:[.,]\d{1,2})?)/);
+  if(!m) return undefined;
+  const n=Number(m[1].replace('.','').replace(',','.'));
+  return Number.isFinite(n)?n:undefined;
+}
+
+function extractBalancedJsonArray(html:string, marker:string):any[] {
+  const startMarker=html.indexOf(marker);
+  if(startMarker<0) return [];
+  const start=html.indexOf('[',startMarker+marker.length);
+  if(start<0) return [];
+  let depth=0, inString=false, escape=false;
+  for(let i=start;i<html.length;i++){
+    const ch=html[i];
+    if(inString){
+      if(escape){escape=false;continue;}
+      if(ch==='\\\\'){escape=true;continue;}
+      if(ch==='"') inString=false;
+      continue;
+    }
+    if(ch==='"'){inString=true;continue;}
+    if(ch==='[') depth++;
+    else if(ch===']'){
+      depth--;
+      if(depth===0){
+        const raw=html.slice(start,i+1);
+        try{return JSON.parse(raw)}catch{return []}
+      }
+    }
+  }
+  return [];
+}
+
+function bergzeitUrlMap(html:string):Map<string,{url:string,image?:string,description?:string}>{
+  const map=new Map<string,{url:string,image?:string,description?:string}>();
+  const $=cheerio.load(html);
+  $('script[type="application/ld+json"]').each((_,el)=>{
+    try{
+      const j=JSON.parse($(el).html()||'null');
+      const items=Array.isArray(j?.itemListElement)?j.itemListElement:[];
+      for(const it of items){
+        const u=String(it?.url||'');
+        const m=u.match(/\/(\d{6,})\/?$/);
+        if(m) map.set(m[1],{url:u,image:it?.image,description:it?.description});
+      }
+    }catch{}
+  });
+  return map;
+}
+
+function extractBergzeitState(html:string, source:ShopSource):RawOffer[]{
+  const elements=extractBalancedJsonArray(html,'elementsList:');
+  if(!elements.length) return [];
+  const urls=bergzeitUrlMap(html);
+  const out:RawOffer[]=[];
+  for(const el of elements){
+    const d=el?.data||el;
+    const brand=String(d?.brand?.name||'').trim();
+    if(!PROFILE.brands.some(b=>b.toLowerCase().replace('’',"'")===brand.toLowerCase().replace('’',"'"))) continue;
+    const name=String(d?.name||'').trim();
+    const desc=String(d?.description||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    if(!likelyProductText(name+' '+desc)) continue;
+    const productId=String(d?.productId||d?.id||'');
+    const info=urls.get(productId);
+    const price=parseEuroText(d?.price?.current) ?? Number(d?.price?.priceForSchemaOrgOffer);
+    const old=parseEuroText(d?.price?.old) ?? parseEuroText(d?.price?.previous) ?? price;
+    if(!Number.isFinite(price)||!price||!Number.isFinite(old)||!old) continue;
+    const analytics=d?.googleImpression?.ecommerce?.items?.[0] || d?.googleClick?.ecommerce?.items?.[0];
+    const variant=String(analytics?.item_variant||'');
+    const sizePart=variant.includes('|')?variant.split('|').pop()!.trim():'';
+    // Listing state exposes only a representative variant. Do not claim size availability
+    // unless the value itself is a normal apparel size; detail validation remains authoritative.
+    const sizes=/^(XXS|XS|S|M|L|XL|XXL|XXXL|2[8-9]|3[0-9]|4[0-2])$/i.test(sizePart)?[sizePart.toUpperCase()]:[];
+    const image=d?.images?.[0]?.src || info?.image;
+    const url=info?.url || (productId?('https://www.bergzeit.de/p/'+productId+'/'):source.baseUrl);
+    out.push({
+      sourceId:source.id,merchant:source.name,merchantCountry:source.country,
+      url,imageUrl:image,brand,name,sizes,currency:'EUR',price,rrp:Math.max(old,price),
+      availability:'unknown',description:desc || info?.description
+    });
+  }
+  return out;
+}
+
 export function extractTargetedListing(html:string, source:ShopSource, pageUrl:string):RawOffer[] {
+  if(source.id==='bergzeit') return extractBergzeitState(html,source);
   const $=cheerio.load(html);
   const out:RawOffer[]=[];
   const seen=new Set<string>();
