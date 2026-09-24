@@ -1,4 +1,4 @@
 {
   "framework": "nextjs",
-  "crons": [{"path": "/api/run", "schedule": "0 7 * * *"}]
+  "crons": [{"path": "/api/run", "schedule": "* * * * *"}]
 }
