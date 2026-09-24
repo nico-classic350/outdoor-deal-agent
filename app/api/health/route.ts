@@ -12,7 +12,21 @@ export async function GET() {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     await sql`SELECT 1 AS ok`;
-    return NextResponse.json({ ok: true, databaseConfigured: true, databaseReachable: true });
+    const runDate = new Date().toISOString().slice(0, 10);
+    const table = await sql`SELECT to_regclass('public.agent_batch_runs') AS name`;
+    let batchRowsToday = 0;
+    if (table[0]?.name) {
+      const rows = await sql`SELECT count(*)::int AS count FROM agent_batch_runs WHERE run_date = ${runDate}`;
+      batchRowsToday = Number(rows[0]?.count || 0);
+    }
+    return NextResponse.json({
+      ok: true,
+      databaseConfigured: true,
+      databaseReachable: true,
+      runDate,
+      batchTablePresent: Boolean(table[0]?.name),
+      batchRowsToday,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[health] database check failed', message);
