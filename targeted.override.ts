@@ -35,6 +35,15 @@ function moneyValues(s:string):number[]{
 }
 function clean(s:string){return s.replace(/\s+/g,' ').trim()}
 function abs(base:string,href:string){try{return new URL(href,base).toString()}catch{return ''}}
+function canonicalProductUrl(raw:string){
+  try{
+    const u=new URL(raw);
+    u.hash='';
+    // Product listing query parameters here represent variants/tracking, not distinct products.
+    u.search='';
+    return u.toString();
+  }catch{return raw}
+}
 function findBrand(s:string){
   const low=s.toLowerCase();
   return PROFILE.brands.find(b=>low.includes(b.toLowerCase().replace('’',"'"))) ||
@@ -138,7 +147,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
 
   $('a[href]').each((_,el)=>{
     const a=$(el);
-    const href=abs(pageUrl,a.attr('href')||'');
+    const href=canonicalProductUrl(abs(pageUrl,a.attr('href')||''));
     if(!href || !href.startsWith('http')) return;
 
     let card=a.closest('article,li,[data-testid*="product"],[class*="product"],[class*="tile"],[class*="card"]').first();
