@@ -1,4 +1,73 @@
 {
   "framework": "nextjs",
-  "crons": [{"path": "/api/run", "schedule": "0 7 * * *"}]
+  "crons": [
+    {
+      "path": "/api/batch/0",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/batch/1",
+      "schedule": "5 7 * * *"
+    },
+    {
+      "path": "/api/batch/2",
+      "schedule": "10 7 * * *"
+    },
+    {
+      "path": "/api/batch/3",
+      "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/batch/4",
+      "schedule": "20 7 * * *"
+    },
+    {
+      "path": "/api/batch/5",
+      "schedule": "25 7 * * *"
+    },
+    {
+      "path": "/api/batch/6",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/batch/7",
+      "schedule": "35 7 * * *"
+    },
+    {
+      "path": "/api/batch/8",
+      "schedule": "40 7 * * *"
+    },
+    {
+      "path": "/api/batch/9",
+      "schedule": "45 7 * * *"
+    },
+    {
+      "path": "/api/batch/10",
+      "schedule": "50 7 * * *"
+    },
+    {
+      "path": "/api/batch/11",
+      "schedule": "55 7 * * *"
+    },
+    {
+      "path": "/api/batch/12",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/batch/13",
+      "schedule": "5 8 * * *"
+    },
+    {
+      "path": "/api/batch/14",
+      "schedule": "10 8 * * *"
+    },
+    {
+      "path": "/api/batch/15",
+      "schedule": "15 8 * * *"
+    },
+    {
+      "path": "/api/finalize",
+      "schedule": "25 8 * * *"
+    }
+  ]
 }
