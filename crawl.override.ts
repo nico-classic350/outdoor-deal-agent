@@ -3,7 +3,8 @@ import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
 import { browserExtract } from './browser';
-import { targetedListingUrls, extractTargetedListing } from './targeted';\nimport { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
+import { targetedListingUrls, extractTargetedListing } from './targeted';
+import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
