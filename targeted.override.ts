@@ -165,7 +165,9 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     const key=(href+'|'+name).toLowerCase();
     if(seen.has(key)) return; seen.add(key);
 
-    const sizes=[...new Set((blob.match(/\b(?:XXS|XS|S|M|L|XL|XXL|XXXL|(?:2[8-9]|3[0-9]|4[0-2])(?:[-/]?(?:SHORT|REG|LONG|R|L))?)\b/gi)||[]).map(x=>x.toUpperCase()))];
+    // Listing pages are discovery only. Never treat incidental text or a displayed
+    // variant as confirmed live size availability; validate sizes on the product detail.
+    const sizes:string[]=[];
     const img=card.find('img').first();
     const imageUrl=img.attr('src')||img.attr('data-src')||img.attr('srcset')?.split(' ')[0];
 
