@@ -3,7 +3,7 @@ import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
 import { browserExtract } from './browser';
-import { targetedListingUrls, extractTargetedListing } from './targeted';
+import { targetedListingUrls, extractTargetedListing } from './targeted';\nimport { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
@@ -41,6 +41,19 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   });
 
   try{
+    if(source.id==='globetrotter'){
+      technicalPath.push('official-affiliate-feed');
+      try{
+        const feedOffers=await ingestGlobetrotterOfficialFeed(source);
+        offers.push(...feedOffers);
+        discovered=['official-product-feed'];
+        technicalPath.push('official-affiliate-feed-success');
+        return {offers,coverage:coverage('success','Official Globetrotter product data feed')};
+      }catch(e:any){
+        technicalPath.push('official-affiliate-feed-failed');
+      }
+    }
+
     const targeted=targetedListingUrls(source);
     if(targeted.length){
       technicalPath.push('targeted-brand-listings');
