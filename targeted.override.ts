@@ -115,14 +115,12 @@ function extractBergzeitState(html:string, source:ShopSource):RawOffer[]{
     const price=parseEuroText(d?.price?.current) ?? Number(d?.price?.priceForSchemaOrgOffer);
     const old=parseEuroText(d?.price?.old) ?? parseEuroText(d?.price?.previous) ?? price;
     if(!Number.isFinite(price)||!price||!Number.isFinite(old)||!old) continue;
-    const analytics=d?.googleImpression?.ecommerce?.items?.[0] || d?.googleClick?.ecommerce?.items?.[0];
-    const variant=String(analytics?.item_variant||'');
-    const sizePart=variant.includes('|')?variant.split('|').pop()!.trim():'';
-    // Listing state exposes only a representative variant. Do not claim size availability
-    // unless the value itself is a normal apparel size; detail validation remains authoritative.
-    const sizes=/^(XXS|XS|S|M|L|XL|XXL|XXXL|2[8-9]|3[0-9]|4[0-2])$/i.test(sizePart)?[sizePart.toUpperCase()]:[];
+    // Listing state exposes a representative variant, not complete live size availability.
+    // Leave sizes unconfirmed until the product detail/variant endpoint is validated.
+    const sizes:string[]=[];
     const image=d?.images?.[0]?.src || info?.image;
-    const url=info?.url || (productId?('https://www.bergzeit.de/p/'+productId+'/'):source.baseUrl);
+    if(!info?.url) continue;
+    const url=info.url;
     out.push({
       sourceId:source.id,merchant:source.name,merchantCountry:source.country,
       url,imageUrl:image,brand,name,sizes,currency:'EUR',price,rrp:Math.max(old,price),
