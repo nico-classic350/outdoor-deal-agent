@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf outdoor-deal-agent && unzip -o outdoor-deal-agent.zip && cp -R outdoor-deal-agent/. . && cp route.override.ts app/api/run/route.ts && cp crawl.override.ts lib/crawl.ts && cp types.override.ts lib/types.ts && cp targeted.override.ts lib/targeted.ts && next build",
+    "build": "rm -rf outdoor-deal-agent && unzip -o outdoor-deal-agent.zip && cp -R outdoor-deal-agent/. . && cp route.override.ts app/api/run/route.ts && cp crawl.override.ts lib/crawl.ts && cp types.override.ts lib/types.ts && cp targeted.override.ts lib/targeted.ts && cp globetrotter-feed.override.ts lib/globetrotter-feed.ts && next build",
     "start": "next start",
     "test": "node --test tests/*.test.mjs"
   },
@@ -28,4 +28,4 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
   }
-}
+}\n
