@@ -1,7 +1,5 @@
 import { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
-import { parse } from 'csv-parse';
-import { parse as parseSync } from 'csv-parse/sync';
 import { PROFILE } from '../config/profile';
 import { RawOffer, ShopSource } from './types';
 
@@ -101,6 +99,87 @@ function inStock(row:Record<string,string>){
   return q==null?true:q>0;
 }
 
+
+type CsvState={field:string,row:string[],inQuotes:boolean,pendingQuote:boolean};
+
+function csvFeed(state:CsvState, chunk:string, delimiter=','){
+  const rows:string[][]=[];
+  let i=0;
+  while(i<chunk.length){
+    let ch=chunk[i];
+
+    if(state.pendingQuote){
+      state.pendingQuote=false;
+      if(ch==='"'){
+        state.field+='"';
+        i++;
+        continue;
+      }
+      state.inQuotes=false;
+      continue; // re-process current character outside quotes
+    }
+
+    if(state.inQuotes){
+      if(ch==='"'){
+        if(i+1<chunk.length){
+          if(chunk[i+1]==='"'){ state.field+='"'; i+=2; continue; }
+          state.inQuotes=false; i++; continue;
+        }
+        state.pendingQuote=true; i++; continue;
+      }
+      state.field+=ch; i++; continue;
+    }
+
+    if(ch==='"'){ state.inQuotes=true; i++; continue; }
+    if(ch===delimiter){ state.row.push(state.field); state.field=''; i++; continue; }
+    if(ch==='\n'){
+      state.row.push(state.field.replace(/\r$/,''));
+      rows.push(state.row);
+      state.row=[]; state.field='';
+      i++; continue;
+    }
+    state.field+=ch; i++;
+  }
+  return rows;
+}
+function csvFinish(state:CsvState){
+  if(state.pendingQuote){ state.pendingQuote=false; state.inQuotes=false; }
+  if(state.field.length||state.row.length){
+    state.row.push(state.field.replace(/\r$/,''));
+    const row=state.row; state.row=[]; state.field=''; return row;
+  }
+  return null;
+}
+function rowsToObjects(rows:string[][]){
+  if(!rows.length) return [] as Record<string,string>[];
+  const headers=rows[0].map(x=>x.replace(/^\uFEFF/,'').trim());
+  return rows.slice(1).filter(r=>r.some(Boolean)).map(r=>{
+    const o:Record<string,string>={}; headers.forEach((h,i)=>o[h]=r[i]??''); return o;
+  });
+}
+async function* csvObjects(stream:Readable){
+  const decoder=new TextDecoder();
+  const state:CsvState={field:'',row:[],inQuotes:false,pendingQuote:false};
+  let headers:string[]|null=null;
+  for await(const chunk of stream){
+    const rows=csvFeed(state,decoder.decode(chunk as Uint8Array,{stream:true}));
+    for(const row of rows){
+      if(!headers){ headers=row.map(x=>x.replace(/^\uFEFF/,'').trim()); continue; }
+      if(!row.some(Boolean)) continue;
+      const o:Record<string,string>={}; headers.forEach((h,i)=>o[h]=row[i]??''); yield o;
+    }
+  }
+  const tail=decoder.decode(); if(tail) for(const row of csvFeed(state,tail)){
+    if(!headers){headers=row.map(x=>x.replace(/^\uFEFF/,'').trim());continue}
+    const o:Record<string,string>={}; headers.forEach((h,i)=>o[h]=row[i]??''); yield o;
+  }
+  const last=csvFinish(state);
+  if(last){
+    if(!headers) headers=last.map(x=>x.replace(/^\uFEFF/,'').trim());
+    else { const o:Record<string,string>={}; headers.forEach((h,i)=>o[h]=last[i]??''); yield o; }
+  }
+}
+
 async function loadFeedList():Promise<FeedMeta[]>{
   const key=process.env.AWIN_DATAFEED_API_KEY;
   if(!key) return [];
@@ -110,8 +189,11 @@ async function loadFeedList():Promise<FeedMeta[]>{
   });
   if(!r.ok) throw new Error('Awin feed list HTTP '+r.status);
   const text=await r.text();
-  const rows=parseSync(text,{columns:true,skip_empty_lines:true,bom:true,relax_column_count:true,relax_quotes:true}) as Record<string,string>[];
-  return rows.map(row=>({
+  const state:CsvState={field:'',row:[],inQuotes:false,pendingQuote:false};
+  const rows=csvFeed(state,text);
+  const last=csvFinish(state); if(last) rows.push(last);
+  const objects=rowsToObjects(rows);
+  return objects.map(row=>({
     advertiserId:n(row['Advertiser ID'] || row['Advertiser Id'] || row['advertiser_id']),
     advertiserName:n(row['Advertiser Name'] || row['advertiser_name']),
     membershipStatus:n(row['Membership Status'] || row['membership_status']),
@@ -168,17 +250,8 @@ export async function ingestAwinProductFeed(source:ShopSource):Promise<AwinInges
   if(!r.ok) throw new Error('Awin product feed HTTP '+r.status);
 
   const stream=await readableCsv(r);
-  const parser=stream.pipe(parse({
-    columns:true,
-    bom:true,
-    relax_column_count:true,
-    relax_quotes:true,
-    skip_empty_lines:true
-  }));
-
   const grouped=new Map<string,RawOffer>();
-  for await(const rowAny of parser){
-    const row=rowAny as Record<string,string>;
+  for await(const row of csvObjects(stream)){
     const brand=brandAllowed(row.brand_name);
     if(!brand || !isRelevantLongMensPants(row) || !inStock(row)) continue;
 
