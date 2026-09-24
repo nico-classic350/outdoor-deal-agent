@@ -35,7 +35,9 @@ function relevant(name:string,cat:string,gender:string,tags:string){
     /regenhose|hardshell/i,
     /skihose|ski hose|skitour|langlauf/i,
     /zip[- ]?off|convertible/i,
-    /bib\b|latzhose/i
+    /bib\b|latzhose/i,
+    /kids?|kinder|junior|mädchen|jungen/i,
+    /fahrrad|bike|mtb|cycling|dirt craft/i
   ];
   if(excluded.some(rx=>rx.test(n+' '+c+' '+t))) return false;
 
