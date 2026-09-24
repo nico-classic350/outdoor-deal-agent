@@ -1,0 +1,6 @@
+{
+  "crons": [{"path": "/api/run", "schedule": "0 7 * * *"}],
+  "functions": {
+    "app/api/run/route.ts": {"maxDuration": 300}
+  }
+}
