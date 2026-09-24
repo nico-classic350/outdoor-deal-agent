@@ -5,6 +5,7 @@ import { ingestFeed } from './feed';
 import { browserExtract } from './browser';
 import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
+import { ingestAwinProductFeed } from './awin-feed';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
@@ -53,6 +54,25 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       }catch(e:any){
         technicalPath.push('official-affiliate-feed-failed');
       }
+    }
+
+    technicalPath.push('awin-check');
+    try{
+      const awin=await ingestAwinProductFeed(source);
+      if(awin.configured){
+        technicalPath.push('awin-product-feed');
+        if(awin.offers.length){
+          offers.push(...awin.offers);
+          discovered=['awin-product-feed'];
+          technicalPath.push('awin-product-feed-success');
+          return {offers,coverage:coverage('success',awin.note)};
+        }
+        technicalPath.push('awin-feed-empty');
+      } else {
+        technicalPath.push('awin-not-configured-or-unmapped');
+      }
+    }catch(e:any){
+      technicalPath.push('awin-feed-failed');
     }
 
     const targeted=targetedListingUrls(source);
