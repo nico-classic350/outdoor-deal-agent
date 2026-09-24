@@ -12,13 +12,34 @@ function brandAllowed(s:string){
   const x=norm(s).toLowerCase().replace(/[’']/g,"'");
   return PROFILE.brands.find(b=>b.toLowerCase().replace(/[’']/g,"'")===x);
 }
-function relevant(name:string,desc:string,cat:string,gender:string){
-  const text=(name+' '+desc+' '+cat).toLowerCase();
-  if(!/(hose|hosen|pant|pants|trouser)/i.test(text)) return false;
-  if(/(shorts?\b|regenhose|hardshell|skihose|ski hose|bib\b|zip[- ]?off|convertible)/i.test(text)) return false;
-  const g=gender.toLowerCase();
+function relevant(name:string,cat:string,gender:string,tags:string){
+  const n=name.toLowerCase();
   const c=cat.toLowerCase();
-  return g.includes('herren') || g.includes('unisex') || c.startsWith('herren >');
+  const g=gender.toLowerCase();
+  const t=tags.toLowerCase();
+
+  const male = g.includes('herren') || g.includes('unisex') || c.startsWith('herren >');
+  if(!male) return false;
+
+  // Relevance must come from structured classification / product title, never description.
+  const isLongPants =
+    /\b(hose|hosen|pants?|trousers?)\b/i.test(name) ||
+    /outdoor-bekleidung\s*>\s*hosen|bekleidung\s*>\s*hosen|trekkinghosen|wanderhosen/i.test(c+' '+t);
+  if(!isLongPants) return false;
+
+  const excluded = [
+    /gürtel|belt/i,
+    /funktionsunterwäsche|unterwäsche|brief|boxer/i,
+    /tights?|leggings?/i,
+    /shorts?|kurze hose/i,
+    /regenhose|hardshell/i,
+    /skihose|ski hose|skitour|langlauf/i,
+    /zip[- ]?off|convertible/i,
+    /bib\b|latzhose/i
+  ];
+  if(excluded.some(rx=>rx.test(n+' '+c+' '+t))) return false;
+
+  return true;
 }
 function canonical(raw:string){
   try{const u=new URL(norm(raw));u.hash='';return u.toString()}catch{return norm(raw)}
@@ -49,7 +70,8 @@ export async function ingestGlobetrotterOfficialFeed(source:ShopSource):Promise<
     const desc=norm(row['Beschreibung']||'');
     const cat=norm(row['Kategorie']||'');
     const gender=norm(row['Geschlecht']||'');
-    if(!relevant(name,desc,cat,gender)) return;
+    const tags=norm(row['Stichworte']||'');
+    if(!relevant(name,cat,gender,tags)) return;
 
     const price=euro(row['VK']||'');
     if(!price) return;
