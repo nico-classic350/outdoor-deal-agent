@@ -16,7 +16,7 @@ export async function GET(){
     created_at timestamptz NOT NULL DEFAULT now(),
     result jsonb
   )`;
-  const key='globetrotter-feed-v1-2026-09-24';
+  const key='globetrotter-feed-v2-2026-09-24';
   const lock=await sql`INSERT INTO agent_single_tests(test_key,result) VALUES(${key},null)
     ON CONFLICT(test_key) DO NOTHING RETURNING test_key`;
   if(!lock.length) return NextResponse.json({error:'already_run'},{status:409});
