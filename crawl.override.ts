@@ -3,6 +3,7 @@ import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
 import { browserExtract } from './browser';
+import { targetedListingUrls, extractTargetedListing } from './targeted';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
@@ -40,6 +41,30 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   });
 
   try{
+    const targeted=targetedListingUrls(source);
+    if(targeted.length){
+      technicalPath.push('targeted-brand-listings');
+      discovered=targeted;
+      for(const url of targeted){
+        try{
+          technicalPath.push('listing-http-fetch');
+          const r=await get(url,9000); httpStatuses.push(r.status);
+          if(!r.ok) continue;
+          const html=await r.text();
+          const x=extractTargetedListing(html,source,url);
+          if(x.length) technicalPath.push('listing-card-extraction');
+          offers.push(...x);
+        }catch{ technicalPath.push('listing-http-error'); }
+      }
+      const unique=[...new Map(offers.map(o=>[(o.url+'|'+o.name).toLowerCase(),o])).values()];
+      offers.splice(0,offers.length,...unique);
+      if(offers.length){
+        return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
+      }
+      technicalPath.push('targeted-listings-empty','generic-fallback');
+      discovered=[];
+    }
+
     technicalPath.push('feed-check');
     const feedOffers=await ingestFeed(source);
     if(feedOffers.length){
