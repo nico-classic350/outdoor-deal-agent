@@ -30,7 +30,7 @@
   },
   "packageManager": "pnpm@10.15.1",
   "engines": {
-    "node": "22.x",
+    "node": "24.x",
     "pnpm": "10.15.1"
   }
 }
