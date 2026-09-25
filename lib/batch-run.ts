@@ -6,6 +6,7 @@ import { crawlSource } from './crawl';
 import { normalizeOffer } from './normalize';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
 import { saveRun } from './store';
+import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
 
 export const BATCH_SIZE = 6;
 export const BATCH_COUNT = Math.ceil(SHOPS.length / BATCH_SIZE);
@@ -14,9 +15,6 @@ const BATCH_CONCURRENCY = 3;
 let schemaPromise: Promise<void> | null = null;
 
 function utcDateKey(d = new Date()) { return d.toISOString().slice(0, 10); }
-function key(o: NormalizedOffer) {
-  return `${o.brand}|${o.name}|${o.color || ''}`.toLowerCase().replace(/\s+/g, ' ');
-}
 function sqlClient() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not configured');
   return neon(process.env.DATABASE_URL);
@@ -92,14 +90,11 @@ export async function finalizeBatches(runDate = utcDateKey()) {
 
   const coverage = rows.flatMap((r:any)=>r.coverage as SourceCoverage[]);
   const normalized = rows.flatMap((r:any)=>r.offers as NormalizedOffer[]);
-  const best = new Map<string,NormalizedOffer>();
-  for(const o of normalized){
-    const k=key(o), prev=best.get(k);
-    if(!prev || o.effectiveCostEur<prev.effectiveCostEur) best.set(k,o);
-  }
-  const unique=[...best.values()].sort((a,b)=>b.score-a.score);
-  const deals=unique.filter(x=>x.effectiveDiscountPct>=PROFILE.minEffectiveDiscountPct && x.class!=='Near Miss').slice(0,5);
-  const near=unique.filter(x=>x.effectiveDiscountPct<PROFILE.minEffectiveDiscountPct && x.effectiveDiscountPct>=30).slice(0,3);
+  // Reassess persisted candidates at publish time, including batches created
+  // before a change to the acceptance rules.
+  const screened=normalized.filter(x=>productEligible(x.name,x.description));
+  const {deals,near}=selectOffers(screened,PROFILE.minEffectiveDiscountPct);
+  const distinct = new Set(screened.map(offerKey));
   const count=(status:string)=>coverage.filter(x=>x.status===status).length;
   const startedAt=new Date(Math.min(...rows.map((r:any)=>new Date(r.started_at).getTime()))).toISOString();
   const finishedAt=new Date().toISOString();
@@ -109,7 +104,9 @@ export async function finalizeBatches(runDate = utcDateKey()) {
     success:count('success'),partial:count('partial'),browser:count('browser'),
     blocked:count('blocked'),failed:count('failed'),
     rawOffers:coverage.reduce((sum,x)=>sum+Number(x.parsedOffers||0),0),
-    normalizedOffers:normalized.length,qualifiedDeals:deals.length,nearMisses:near.length,coverage
+    normalizedOffers:normalized.length,screenedOffers:screened.length,
+    distinctOffers:distinct.size,confirmedSizeOffers:screened.filter(x=>x.sizeFit==='confirmed').length,
+    qualifiedDeals:deals.length,nearMisses:near.length,coverage
   };
   await saveRun(report,deals,near);
   console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length}`);

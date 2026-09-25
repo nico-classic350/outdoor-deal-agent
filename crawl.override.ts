@@ -95,7 +95,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           offers.push(...x);
         }catch{ technicalPath.push('listing-http-error'); }
       }
-      const unique=[...new Map(offers.map(o=>[(o.url+'|'+o.name).toLowerCase(),o])).values()];
+      const unique=[...new Map(offers.map(o=>[o.url.toLowerCase(),o])).values()];
       offers.splice(0,offers.length,...unique);
       if(offers.length){
         return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
