@@ -4,9 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf outdoor-deal-agent && unzip -o outdoor-deal-agent.zip && cp -R outdoor-deal-agent/. . && cp route.override.ts app/api/run/route.ts && cp crawl.override.ts lib/crawl.ts && cp types.override.ts lib/types.ts && cp targeted.override.ts lib/targeted.ts && cp globetrotter-feed.override.ts lib/globetrotter-feed.ts && cp awin-feed.override.ts lib/awin-feed.ts && next build",
-    "start": "next start",
-    "test": "node --test tests/*.test.mjs"
+    "prepare:source": "node scripts/prepare-build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "build:next": "next build",
+    "build": "pnpm prepare:source && pnpm build:next",
+    "ci": "pnpm prepare:source && pnpm typecheck && pnpm test && pnpm build:next",
+    "start": "next start"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
@@ -18,14 +22,15 @@
     "robots-parser": "^3.0.1",
     "zod": "^4.0.0"
   },
-  "optionalDependencies": {
-    "@sparticuz/chromium": "^141.0.0",
-    "playwright-core": "^1.55.0"
-  },
   "devDependencies": {
     "typescript": "^5.8.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
+  },
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "10.15.1"
   }
 }

@@ -4,7 +4,11 @@ export const runtime = 'nodejs';
 
 function retired() {
   return NextResponse.json(
-    { ok: false, error: 'monolithic_run_retired', message: 'Use the batched pipeline.' },
+    {
+      ok: false,
+      error: 'monolithic_run_retired',
+      message: 'The crawler uses the batched pipeline to stay within Vercel Hobby runtime limits.',
+    },
     { status: 410, headers: { 'Cache-Control': 'no-store' } }
   );
 }

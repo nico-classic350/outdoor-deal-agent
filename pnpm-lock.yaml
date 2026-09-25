@@ -45,13 +45,6 @@ importers:
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
-    optionalDependencies:
-      '@sparticuz/chromium':
-        specifier: ^141.0.0
-        version: 141.0.0
-      playwright-core:
-        specifier: ^1.55.0
-        version: 1.63.0
 
 packages:
 
