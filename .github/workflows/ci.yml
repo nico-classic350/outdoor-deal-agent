@@ -3,16 +3,21 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [main, stabilize-agent]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CI: true
+  NEXT_TELEMETRY_DISABLED: 1
 
 jobs:
   verify:
@@ -20,6 +25,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: pnpm/action-setup@v4
         with:
           version: 10.15.1
@@ -27,5 +34,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run ci
+      - name: Install exact dependency graph
+        run: pnpm install --frozen-lockfile
+      - name: Full preflight
+        run: pnpm run preflight

@@ -8,9 +8,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "build:next": "next build",
-    "build": "pnpm prepare:source && pnpm build:next",
-    "ci": "pnpm prepare:source && pnpm typecheck && pnpm test && pnpm build:next",
-    "start": "next start"
+    "build": "pnpm prepare:source && pnpm validate:config && pnpm build:next",
+    "ci": "pnpm run preflight",
+    "start": "next start",
+    "validate:config": "node scripts/validate-config.mjs",
+    "preflight": "pnpm prepare:source && pnpm validate:config && pnpm typecheck && pnpm test && pnpm build:next"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
