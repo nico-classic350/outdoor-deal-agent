@@ -49,4 +49,6 @@ Only a locally green `release-*` commit should be pushed. Open a pull request to
 
 ## Optional Awin
 
+Awin mappings are additive and always fall back to the existing retailer ingestion when a feed is unavailable.
+
 Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Prepared mappings currently include Bergfreunde, Bergzeit, SportScheck, Sport Bittl, engelhorn, INTERSPORT DE, DECATHLON DE, GALERIA, Hardloop, Breuninger, Blue Tomato, sportdeal24, Bever, Maxi Sport, Outnorth and VerticalExtreme.
