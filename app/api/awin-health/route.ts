@@ -15,6 +15,10 @@ const TARGETS = [
   { id: 11590, name: 'Breuninger DE' },
   { id: 11873, name: 'Blue Tomato DE' },
   { id: 15416, name: 'sportdeal24 DE' },
+  { id: 8522, name: 'Bever NL' },
+  { id: 9923, name: 'Maxi Sport IT' },
+  { id: 18619, name: 'Outnorth SE' },
+  { id: 16536, name: 'VerticalExtreme AT/DE catalog' },
 ];
 
 function parseCsv(text: string) {

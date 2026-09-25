@@ -35,6 +35,10 @@ export const AWIN_ADVERTISERS: Record<string,number> = {
   breuninger: 11590,
   'blue-tomato': 11873,
   sportdeal24: 15416,
+  bever: 8522,
+  maxisport: 9923,
+  outnorth: 18619,
+  verticalextreme: 16536,
 };
 
 let feedListCache: Promise<FeedMeta[]> | null = null;
