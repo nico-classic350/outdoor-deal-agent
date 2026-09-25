@@ -6,6 +6,15 @@ const TARGETS = [
   { id: 14102, name: 'Bergfreunde DE' },
   { id: 12557, name: 'Bergzeit DE/AT' },
   { id: 14607, name: 'SportScheck DE' },
+  { id: 64060, name: 'Sport Bittl DE' },
+  { id: 13759, name: 'engelhorn DE' },
+  { id: 14050, name: 'INTERSPORT DE' },
+  { id: 14353, name: 'DECATHLON DE' },
+  { id: 46809, name: 'GALERIA DE' },
+  { id: 25688, name: 'Hardloop DE/AT' },
+  { id: 11590, name: 'Breuninger DE' },
+  { id: 11873, name: 'Blue Tomato DE' },
+  { id: 15416, name: 'sportdeal24 DE' },
 ];
 
 function parseCsv(text: string) {
@@ -26,6 +35,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       awinConfigured: false,
+      targetCount: TARGETS.length,
       targets: TARGETS.map(x => ({ ...x, accessible: false })),
     });
   }
@@ -37,10 +47,7 @@ export async function GET() {
     );
     if (!r.ok) {
       return NextResponse.json({
-        ok: false,
-        awinConfigured: true,
-        feedListReachable: false,
-        httpStatus: r.status,
+        ok: false, awinConfigured: true, feedListReachable: false, httpStatus: r.status,
       }, { status: 502 });
     }
 
@@ -55,14 +62,13 @@ export async function GET() {
       awinConfigured: true,
       feedListReachable: true,
       feedCount: rows.length,
+      targetCount: TARGETS.length,
+      accessibleTargetCount: TARGETS.filter(x => ids.has(x.id)).length,
       targets: TARGETS.map(x => ({ ...x, accessible: ids.has(x.id) })),
     });
-  } catch (e) {
+  } catch {
     return NextResponse.json({
-      ok: false,
-      awinConfigured: true,
-      feedListReachable: false,
-      error: 'awin_feed_list_unreachable',
+      ok: false, awinConfigured: true, feedListReachable: false, error: 'awin_feed_list_unreachable',
     }, { status: 502 });
   }
 }

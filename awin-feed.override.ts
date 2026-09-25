@@ -22,10 +22,19 @@ export type AwinIngestResult = {
   note:string;
 };
 
-const AWIN_ADVERTISERS: Record<string,number> = {
+export const AWIN_ADVERTISERS: Record<string,number> = {
   bergfreunde: 14102,
   bergzeit: 12557,
   sportscheck: 14607,
+  'sport-bittl': 64060,
+  engelhorn: 13759,
+  'intersport-de': 14050,
+  'decathlon-de': 14353,
+  galeria: 46809,
+  hardloop: 25688,
+  breuninger: 11590,
+  'blue-tomato': 11873,
+  sportdeal24: 15416,
 };
 
 let feedListCache: Promise<FeedMeta[]> | null = null;

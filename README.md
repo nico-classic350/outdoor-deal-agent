@@ -9,7 +9,7 @@ The Vercel Hobby deployment uses a batched daily crawl. Each batch persists norm
 ## Deal quality gates
 
 - Only eligible men's long outdoor trousers enter the shortlist; ski, winter, rain, zip-off, shorts and tights are rejected.
-- A published deal requires a confirmed W33/W34 waist with inseam at most L32. Missing or ambiguous sizes remain review candidates with an explicit reason; a large discount alone cannot promote them to a deal.
+- Missing size data does not suppress an otherwise strong deal. Unknown sizes remain visible as unverified; only explicit incompatible size evidence is a hard exclusion. Confirmed W33/W34 with inseam at most L32 still receives the highest size score.
 - Offers with the same merchant and product URL are collapsed even when listing-card titles differ. Tracking parameters do not create extra products.
 - The coverage report separates technical source status from screened, distinct and size-confirmed offers. A successful fetch does not imply usable deals.
 - Listing cards are discovery evidence; the crawler does not infer live size availability from them. Only explicit variant sizes can confirm a match.
@@ -49,4 +49,4 @@ Only a locally green `release-*` commit should be pushed. Open a pull request to
 
 ## Optional Awin
 
-Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths.
+Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Prepared mappings currently include Bergfreunde, Bergzeit, SportScheck, Sport Bittl, engelhorn, INTERSPORT DE, DECATHLON DE, GALERIA, Hardloop, Breuninger, Blue Tomato and sportdeal24.
