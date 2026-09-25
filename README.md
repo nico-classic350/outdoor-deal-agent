@@ -18,10 +18,23 @@ The Vercel Hobby deployment uses a batched daily crawl. Each batch persists norm
 
 - Node and pnpm versions are pinned.
 - CI installs with `pnpm install --frozen-lockfile`.
+- `pnpm run preflight` prepares the archived source, validates deployment invariants, runs TypeScript, tests and a full Next.js build.
 - TypeScript validation is enabled; build errors are not ignored.
 - `scripts/prepare-build.mjs` extracts the legacy source archive into a staging directory and copies only explicit source files. The profile and deal-quality modules are tracked directly so a build cannot restore older acceptance rules. It never overwrites package, lockfile, Vercel or TypeScript configuration.
-- Build overrides are checked before Next.js starts.
-- Changes are validated on a preview branch before production.
+- `scripts/validate-config.mjs` prevents source-count / cron-count drift, accidental monolithic cron activation, missing cron authorization, browser-runtime regressions and Node/pnpm version drift.
+
+## Release workflow
+
+Unfinished work must use an `internal-*` or `scratch-*` branch. Those branches, plus the old `stabilize-agent` and `agent-test-run` branches, are blocked from Vercel deployment and do not trigger push CI.
+
+Before any release branch is pushed, run:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run preflight
+```
+
+Only a locally green `release-*` commit should be pushed. Open a pull request to `main`, require the PR CI and Vercel Preview to be green, then merge the exact tested commit. Production is deployed from `main`.
 
 ## Runtime safeguards
 
@@ -31,6 +44,7 @@ The Vercel Hobby deployment uses a batched daily crawl. Each batch persists norm
 - Batch writes are idempotent per date/index.
 - Finalization is idempotent per run date and refuses to publish incomplete daily runs.
 - A second finalizer cron retries one hour later if the first attempt ran before every batch was present.
+- `/api/health` checks database reachability and, after the daily grace window, treats missing batches or a missing finalized run as unhealthy.
 - Read-only status endpoints use short CDN caching where appropriate.
 
 ## Optional Awin
