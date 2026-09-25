@@ -11,9 +11,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {
-    return NextResponse.json(await finalizeBatches(), { headers: { 'Cache-Control': 'no-store' } });
+    const result = await finalizeBatches();
+    console.info(`[finalize-retry] complete=${result.complete}`);
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
-    console.error('[finalize] failure');
-    return NextResponse.json({ error: 'finalize_failed' }, { status: 500 });
+    console.error('[finalize-retry] failure');
+    return NextResponse.json({ error: 'finalize_retry_failed' }, { status: 500 });
   }
 }

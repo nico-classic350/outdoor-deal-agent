@@ -2,29 +2,32 @@ import { ShopSource, RawOffer, SourceCoverage } from './types';
 import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
-import { browserExtract } from './browser';
+import { browserExtract, browserFallbackConfigured } from './browser';
 import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
+const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
+const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 
 async function get(url:string, ms=10000){
   return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(ms)});
 }
 function absolute(base:string,u:string){try{return new URL(u,base).toString()}catch{return ''}}
 
-async function sitemapUrls(source:ShopSource):Promise<string[]> {
+async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise<string[]> {
   const candidates = source.sitemapHints?.length ? source.sitemapHints.map(x=>absolute(source.baseUrl,x)) : [absolute(source.baseUrl,'/sitemap.xml'),absolute(source.baseUrl,'/sitemap_index.xml')];
   const urls:string[]=[];
   for(const sm of candidates){
+    if(Date.now() >= deadline) break;
     try{
       const r=await get(sm,8000); if(!r.ok) continue; const xml=await r.text();
       const locs=[...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&'));
-      const nested=locs.filter(x=>/sitemap/i.test(x)).slice(0,20);
+      const nested=locs.filter(x=>/sitemap/i.test(x)).slice(0,6);
       if(nested.length){
-        for(const n of nested){ try{const rr=await get(n,8000); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
+        for(const n of nested){ if(Date.now() >= deadline) break; try{const rr=await get(n,6000); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
       } else urls.push(...locs);
     }catch{}
   }
@@ -35,7 +38,8 @@ async function sitemapUrls(source:ShopSource):Promise<string[]> {
 }
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
-  const start=Date.now(); let discovered:string[]=[]; const offers:RawOffer[]=[];
+  const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
+  const budgetRemaining=()=>Date.now()<deadline;
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
   const coverage=(status:SourceCoverage['status'], note?:string):SourceCoverage=>({
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
@@ -80,9 +84,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       technicalPath.push('targeted-brand-listings');
       discovered=targeted;
       for(const url of targeted){
+        if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
         try{
           technicalPath.push('listing-http-fetch');
-          const r=await get(url,9000); httpStatuses.push(r.status);
+          const r=await get(url,7000); httpStatuses.push(r.status);
           if(!r.ok) continue;
           const html=await r.text();
           const x=extractTargetedListing(html,source,url);
@@ -109,7 +114,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
     }
 
     technicalPath.push('sitemap-discovery');
-    discovered=await sitemapUrls(source);
+    discovered=await sitemapUrls(source, Math.min(deadline, Date.now()+15000));
     if(!discovered.length){
       technicalPath.push('base-url-fallback');
       discovered=[source.baseUrl];
@@ -117,13 +122,19 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       technicalPath.push('sitemap-urls');
     }
 
-    for(const url of discovered.slice(0,60)){
+    for(const url of discovered.slice(0,GENERIC_URL_LIMIT)){
+      if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
       try{
         technicalPath.push('http-fetch');
-        const r=await get(url,9000);
+        const r=await get(url,7000);
         httpStatuses.push(r.status);
         if(r.status===403||r.status===429){
-          technicalPath.push(`http-${r.status}`,'browser-fallback');
+          technicalPath.push(`http-${r.status}`);
+          if(!browserFallbackConfigured()){
+            technicalPath.push('browser-fallback-disabled');
+            return {offers,coverage:coverage('blocked',`HTTP ${r.status}; browser fallback not configured`)};
+          }
+          technicalPath.push('browser-fallback');
           const bx=await browserExtract(source,url); offers.push(...bx);
           if(bx.length) technicalPath.push('browser-success'); else technicalPath.push('browser-failed');
           return {offers,coverage:coverage(bx.length?'browser':'blocked',bx.length?'Browser fallback succeeded':`HTTP ${r.status}; browser fallback failed`)};
@@ -143,6 +154,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       }
     }
     if(!offers.length){
+      if(!browserFallbackConfigured()){
+        technicalPath.push('browser-fallback-disabled');
+        return {offers,coverage:coverage('failed','No parseable data; browser fallback not configured')};
+      }
       technicalPath.push('browser-fallback');
       const bx=await browserExtract(source,source.baseUrl); offers.push(...bx);
       if(bx.length) technicalPath.push('browser-success'); else technicalPath.push('browser-failed');
