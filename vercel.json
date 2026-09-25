@@ -1,5 +1,14 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "stabilize-agent": false,
+      "agent-test-run": false,
+      "internal-*": false,
+      "scratch-*": false
+    }
+  },
   "crons": [
     {
       "path": "/api/batch/0",
@@ -73,6 +82,5 @@
       "path": "/api/finalize-retry",
       "schedule": "0 6 * * *"
     }
-  ],
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  ]
 }
