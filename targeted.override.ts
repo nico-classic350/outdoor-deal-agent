@@ -171,7 +171,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     if(name.length<5) name=blob.slice(0,180);
     name=name.replace(/\b\d{1,4}(?:[.,]\d{2})?\s*€.*$/,'').trim();
 
-    const key=(href+'|'+name).toLowerCase();
+    const key=href.toLowerCase();
     if(seen.has(key)) return; seen.add(key);
 
     // Listing pages are discovery only. Never treat incidental text or a displayed

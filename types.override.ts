@@ -76,6 +76,9 @@ export type RunReport = {
   failed: number;
   rawOffers: number;
   normalizedOffers: number;
+  screenedOffers?: number;
+  distinctOffers?: number;
+  confirmedSizeOffers?: number;
   qualifiedDeals: number;
   nearMisses: number;
   coverage: SourceCoverage[];
