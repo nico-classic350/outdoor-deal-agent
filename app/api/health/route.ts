@@ -24,6 +24,7 @@ export async function GET() {
     browserFallbackMode: browser.mode,
     browserFallbackRegion: browser.baseUrl ? new URL(browser.baseUrl).hostname : null,
     browserUnblockEnabled: browser.useUnblock,
+    browserPlaywrightEnabled: browser.usePlaywright,
     runDate,
     pipelineExpectedComplete,
   };
