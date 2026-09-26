@@ -14,8 +14,9 @@ const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_UR
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
 
-async function get(url:string, ms=10000){
-  return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(ms)});
+async function get(url:string, ms=10000, deadline=Infinity){
+  if (Date.now() >= deadline) throw new Error('source-budget-exhausted');
+  return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(Math.max(1,Math.min(ms,deadline-Date.now())))});
 }
 function absolute(base:string,u:string){try{return new URL(u,base).toString()}catch{return ''}}
 
@@ -25,11 +26,11 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
   for(const sm of candidates){
     if(Date.now() >= deadline) break;
     try{
-      const r=await get(sm,8000); if(!r.ok) continue; const xml=await r.text();
+      const r=await get(sm,8000,deadline); if(!r.ok) continue; const xml=await r.text();
       const locs=[...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&'));
       const nested=locs.filter(x=>/sitemap/i.test(x)).slice(0,6);
       if(nested.length){
-        for(const n of nested){ if(Date.now() >= deadline) break; try{const rr=await get(n,6000); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
+        for(const n of nested){ if(Date.now() >= deadline) break; try{const rr=await get(n,6000,deadline); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
       } else urls.push(...locs);
     }catch{}
   }
@@ -53,7 +54,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
     technicalPath.push('browser-fallback',`browser-mode-${browserFallbackMode()}`);
     for(const url of [...new Set(urls)].slice(0,BROWSER_FALLBACK_URL_LIMIT)){
       if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
-      const result=await browserExtract(source,url,{blocked});
+      const result=await browserExtract(source,url,{blocked,deadline});
       if(result.httpStatus) httpStatuses.push(result.httpStatus);
       if(result.mode!=='none') technicalPath.push(`browser-${result.mode}`);
       for(const step of result.steps || []) technicalPath.push(`browser-${step}`);
@@ -110,7 +111,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
         try{
           technicalPath.push('listing-http-fetch');
-          const r=await get(url,7000); httpStatuses.push(r.status);
+          const r=await get(url,7000,deadline); httpStatuses.push(r.status);
           if(!r.ok) continue;
           const html=await r.text();
           const x=extractTargetedListing(html,source,url);
@@ -149,7 +150,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
       try{
         technicalPath.push('http-fetch');
-        const r=await get(url,7000);
+        const r=await get(url,7000,deadline);
         httpStatuses.push(r.status);
         if(r.status===403||r.status===429){
           technicalPath.push(`http-${r.status}`);

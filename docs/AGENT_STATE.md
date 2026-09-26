@@ -52,6 +52,8 @@ Never commit values. Supported names:
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
 
+For a read-only five-shop Browserless smoke test, set the token in the local shell and run `pnpm smoke:browser`. The default shops are Hervis, Sport Bittl, Mammut EU, Odlo EU and Arc’teryx EU; pass shop IDs to select others. It prints coverage and offer counts and never writes to Neon. Browserless requests may consume account credits. HTTP and browser requests share the source deadline; coverage records each browser stage and its elapsed time.
+
 Health exposes only non-secret configuration state.
 
 ## Change workflow

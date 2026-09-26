@@ -65,7 +65,17 @@ function euroPrices(value: string): number[] {
   return result;
 }
 
-async function contentRequest(source: ShopSource, url: string): Promise<BrowserFallbackResult> {
+function timeLeft(deadline: number, cap: number): number {
+  return Math.max(0, Math.min(cap, deadline - Date.now()));
+}
+
+function requireTime(deadline: number, cap: number): number {
+  const ms = timeLeft(deadline, cap);
+  if (ms < 1000) throw new Error('browser-budget-exhausted');
+  return ms;
+}
+
+async function contentRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
   const started = Date.now();
   const cfg = browserFallbackConfig();
   if (!cfg.contentUrl) return { offers: [], mode: 'none', elapsedMs: 0, steps: ['content-disabled'] };
@@ -81,7 +91,7 @@ async function contentRequest(source: ShopSource, url: string): Promise<BrowserF
         gotoOptions: { waitUntil: 'domcontentloaded', timeout: 12000 },
         rejectResourceTypes: ['image', 'media', 'font'],
       }),
-      signal: AbortSignal.timeout(18000),
+      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
     });
     if (!response.ok) {
       return {
@@ -94,12 +104,13 @@ async function contentRequest(source: ShopSource, url: string): Promise<BrowserF
       offers: parseRenderedHtml(source, url, html), mode: 'content', httpStatus: response.status,
       elapsedMs: Date.now() - started, steps: ['content-rendered'],
     };
-  } catch {
-    return { offers: [], mode: 'content', elapsedMs: Date.now() - started, steps: ['content-error'] };
+  } catch (error) {
+    return { offers: [], mode: 'content', elapsedMs: Date.now() - started,
+      steps: [error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'content-error'] };
   }
 }
 
-async function unblockContentRequest(source: ShopSource, url: string): Promise<BrowserFallbackResult> {
+async function unblockContentRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
   const started = Date.now();
   const cfg = browserFallbackConfig();
   if (!cfg.unblockUrl || !cfg.useUnblock) return { offers: [], mode: 'none', elapsedMs: 0, steps: ['unblock-disabled'] };
@@ -115,7 +126,7 @@ async function unblockContentRequest(source: ShopSource, url: string): Promise<B
         screenshot: false,
         browserWSEndpoint: false,
       }),
-      signal: AbortSignal.timeout(18000),
+      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
     });
     if (!response.ok) {
       return {
@@ -129,12 +140,13 @@ async function unblockContentRequest(source: ShopSource, url: string): Promise<B
       offers: html ? parseRenderedHtml(source, url, html) : [], mode: 'unblock', httpStatus: response.status,
       elapsedMs: Date.now() - started, steps: ['unblock-content'],
     };
-  } catch {
-    return { offers: [], mode: 'unblock', elapsedMs: Date.now() - started, steps: ['unblock-content-error'] };
+  } catch (error) {
+    return { offers: [], mode: 'unblock', elapsedMs: Date.now() - started,
+      steps: [error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'unblock-content-error'] };
   }
 }
 
-async function unblockSessionRequest(url: string): Promise<UnblockSessionResult> {
+async function unblockSessionRequest(url: string, deadline: number): Promise<UnblockSessionResult> {
   const started = Date.now();
   const cfg = browserFallbackConfig();
   if (!cfg.unblockUrl || !cfg.useUnblock || !cfg.usePlaywright) {
@@ -151,9 +163,9 @@ async function unblockSessionRequest(url: string): Promise<UnblockSessionResult>
         cookies: true,
         screenshot: false,
         browserWSEndpoint: true,
-        ttl: 30000,
+        ttl: Math.min(30000, timeLeft(deadline, 30000)),
       }),
-      signal: AbortSignal.timeout(18000),
+      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
     });
     if (!response.ok) return { endpoint: null, httpStatus: response.status, elapsedMs: Date.now() - started };
     const payload = await response.json() as { browserWSEndpoint?: string | null };
@@ -175,13 +187,16 @@ async function dismissConsent(page: import('playwright-core').Page) {
   } catch {}
 }
 
-async function stabilizeRenderedPage(page: import('playwright-core').Page) {
+async function stabilizeRenderedPage(page: import('playwright-core').Page, deadline: number) {
   await dismissConsent(page);
-  try {
-    await page.locator(PRODUCT_SELECTOR).first().waitFor({ state: 'attached', timeout: 2500 });
-  } catch {}
+  if (timeLeft(deadline, 2500) > 1000) {
+    try {
+      await page.locator(PRODUCT_SELECTOR).first().waitFor({ state: 'attached', timeout: timeLeft(deadline, 2500) });
+    } catch {}
+  }
 
   for (const fraction of [0.35, 0.7, 1]) {
+    if (timeLeft(deadline, 3000) < 2000) break;
     try {
       await page.evaluate((f) => {
         window.scrollTo(0, Math.max(document.body.scrollHeight * f, window.innerHeight));
@@ -192,6 +207,7 @@ async function stabilizeRenderedPage(page: import('playwright-core').Page) {
 
   const morePattern = /mehr laden|mehr anzeigen|weitere anzeigen|load more|show more|voir plus|afficher plus|carica altro|mostra altro|mostrar más|ver más/i;
   for (let i = 0; i < 2; i += 1) {
+    if (timeLeft(deadline, 3000) < 2000) break;
     try {
       const control = page.locator('button, a').filter({ hasText: morePattern }).first();
       if (!(await control.count()) || !(await control.isVisible())) break;
@@ -279,21 +295,24 @@ async function playwrightFromEndpoint(
   source: ShopSource,
   url: string,
   endpoint: string,
-  options: { navigate: boolean; steps: string[] },
+  options: { navigate: boolean; steps: string[]; deadline: number },
 ): Promise<BrowserFallbackResult> {
   const started = Date.now();
   let browser: import('playwright-core').Browser | null = null;
   let page: import('playwright-core').Page | null = null;
   try {
     const { chromium } = await import('playwright-core');
-    browser = await chromium.connectOverCDP(endpoint, { timeout: 10000 });
+    browser = await chromium.connectOverCDP(endpoint, { timeout: requireTime(options.deadline, 10000) });
     const context = browser.contexts()[0];
     if (!context) return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: [...options.steps, 'no-context'] };
     page = context.pages()[0] || await context.newPage();
+    page.setDefaultTimeout(timeLeft(options.deadline, 2500));
     if (options.navigate || page.url() === 'about:blank') {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(options.deadline, 12000) });
     }
-    await stabilizeRenderedPage(page);
+    requireTime(options.deadline, 2500);
+    await stabilizeRenderedPage(page, options.deadline);
+    requireTime(options.deadline, 2500);
     const html = await page.content();
     let offers = parseRenderedHtml(source, url, html);
     if (!offers.length) offers = await extractRenderedDomOffers(page, source, url);
@@ -305,27 +324,29 @@ async function playwrightFromEndpoint(
       elapsedMs: Date.now() - started,
       steps: [...options.steps, offers.length ? 'playwright-extracted' : 'playwright-empty'],
     };
-  } catch {
-    return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: [...options.steps, 'playwright-error'] };
+  } catch (error) {
+    return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started,
+      steps: [...options.steps, error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'playwright-error'] };
   } finally {
     try { if (page) await page.close(); } catch {}
     try { if (browser) await browser.close(); } catch {}
   }
 }
 
-async function freshPlaywrightRequest(source: ShopSource, url: string, stealth: boolean): Promise<BrowserFallbackResult> {
+async function freshPlaywrightRequest(source: ShopSource, url: string, stealth: boolean, deadline: number): Promise<BrowserFallbackResult> {
   const cfg = browserFallbackConfig();
   const endpoint = stealth ? cfg.stealthPlaywrightUrl : cfg.playwrightUrl;
   if (!cfg.usePlaywright || !endpoint) return { offers: [], mode: 'none', elapsedMs: 0, steps: ['playwright-disabled'] };
   return playwrightFromEndpoint(source, url, endpoint, {
     navigate: true,
+    deadline,
     steps: [stealth ? 'playwright-stealth' : 'playwright-standard'],
   });
 }
 
-async function unblockedPlaywrightRequest(source: ShopSource, url: string): Promise<BrowserFallbackResult> {
+async function unblockedPlaywrightRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
   const started = Date.now();
-  const session = await unblockSessionRequest(url);
+  const session = await unblockSessionRequest(url, deadline);
   if (!session.endpoint) {
     return {
       offers: [], mode: 'playwright', httpStatus: session.httpStatus,
@@ -334,6 +355,7 @@ async function unblockedPlaywrightRequest(source: ShopSource, url: string): Prom
   }
   const result = await playwrightFromEndpoint(source, url, session.endpoint, {
     navigate: false,
+    deadline,
     steps: ['unblock-session', 'playwright-session-handoff'],
   });
   result.elapsedMs = Date.now() - started;
@@ -343,40 +365,57 @@ async function unblockedPlaywrightRequest(source: ShopSource, url: string): Prom
 export async function browserExtract(
   source: ShopSource,
   url: string,
-  options: { blocked?: boolean } = {},
+  options: { blocked?: boolean; deadline?: number } = {},
 ): Promise<BrowserFallbackResult> {
   if (!browserFallbackConfigured()) return { offers: [], mode: 'none', steps: ['browser-disabled'] };
+  const started = Date.now();
+  const deadline = Math.min(options.deadline ?? started + 45000, started + 45000);
   const blocked = Boolean(options.blocked);
+  const attempts: BrowserFallbackResult[] = [];
+  const canTry = () => timeLeft(deadline, 30000) >= 1000;
+  const record = (result: BrowserFallbackResult) => { attempts.push(result); return result.offers.length > 0; };
+  const done = (result: BrowserFallbackResult): BrowserFallbackResult => ({
+    ...result,
+    elapsedMs: Date.now() - started,
+    steps: attempts.flatMap(attempt => [
+      ...(attempt.steps || []),
+      `${attempt.mode}-elapsed-${Math.round((attempt.elapsedMs || 0) / 1000)}s`,
+    ]).concat(attempts.includes(result) ? [] : result.steps || [], canTry() ? [] : ['browser-budget-exhausted']),
+    httpStatus: result.httpStatus ?? [...attempts].reverse().find(attempt => attempt.httpStatus)?.httpStatus,
+  });
 
   if (blocked) {
-    const unblock = await unblockContentRequest(source, url);
-    if (unblock.offers.length) return unblock;
+    const unblock = await unblockContentRequest(source, url, deadline);
+    if (record(unblock)) return done(unblock);
 
-    if (browserPlaywrightConfigured()) {
-      const handoff = await unblockedPlaywrightRequest(source, url);
-      if (handoff.offers.length) return handoff;
+    if (canTry() && browserPlaywrightConfigured()) {
+      const handoff = await unblockedPlaywrightRequest(source, url, deadline);
+      if (record(handoff)) return done(handoff);
 
-      const stealth = await freshPlaywrightRequest(source, url, true);
-      if (stealth.offers.length) return stealth;
+      if (canTry()) {
+        const stealth = await freshPlaywrightRequest(source, url, true, deadline);
+        if (record(stealth)) return done(stealth);
+      }
     }
 
-    const content = await contentRequest(source, url);
-    if (content.offers.length) return content;
-    return {
+    if (canTry()) {
+      const content = await contentRequest(source, url, deadline);
+      if (record(content)) return done(content);
+    }
+    return done({
       offers: [], mode: 'unblock', httpStatus: unblock.httpStatus,
-      elapsedMs: (unblock.elapsedMs || 0) + (content.elapsedMs || 0),
-      steps: [...(unblock.steps || []), ...(content.steps || []), 'blocked-exhausted'],
-    };
+      steps: ['blocked-exhausted'],
+    });
   }
 
-  const content = await contentRequest(source, url);
-  if (content.offers.length) return content;
+  const content = await contentRequest(source, url, deadline);
+  if (record(content)) return done(content);
 
-  if (browserPlaywrightConfigured()) {
-    const playwright = await freshPlaywrightRequest(source, url, false);
-    if (playwright.offers.length) return playwright;
-    return playwright;
+  if (canTry() && browserPlaywrightConfigured()) {
+    const playwright = await freshPlaywrightRequest(source, url, false, deadline);
+    record(playwright);
+    return done(playwright);
   }
 
-  return content;
+  return done(content);
 }
