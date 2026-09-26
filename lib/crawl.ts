@@ -56,6 +56,8 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       const result=await browserExtract(source,url,{blocked});
       if(result.httpStatus) httpStatuses.push(result.httpStatus);
       if(result.mode!=='none') technicalPath.push(`browser-${result.mode}`);
+      for(const step of result.steps || []) technicalPath.push(`browser-${step}`);
+      if(result.elapsedMs != null) technicalPath.push(`browser-elapsed-${Math.round(result.elapsedMs/1000)}s`);
       if(result.offers.length){
         offers.push(...result.offers);
         technicalPath.push('browser-success');
@@ -156,7 +158,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
             return {offers,coverage:coverage('blocked',`HTTP ${r.status}; Browserless token not configured`)};
           }
           const succeeded=await browserFallback([url],true);
-          return {offers,coverage:coverage(succeeded?'browser':'blocked',succeeded?'Browserless unblock fallback succeeded':`HTTP ${r.status}; Browserless fallback returned no parseable product data`)};
+          return {offers,coverage:coverage(succeeded?'browser':'blocked',succeeded?'Browserless unblock/Playwright fallback succeeded':`HTTP ${r.status}; Browserless fallback returned no parseable product data`)};
         }
         if(!r.ok) continue;
         const html=await r.text();
@@ -179,7 +181,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           technicalPath.push('browser-early-escalation');
           const succeeded = await browserFallback([url], false);
           if (succeeded) {
-            return { offers, coverage: coverage('browser', 'Early Browserless rendered-page fallback succeeded after parse-empty HTTP pages') };
+            return { offers, coverage: coverage('browser', 'Early Browserless rendered-page/Playwright fallback succeeded after parse-empty HTTP pages') };
           }
           technicalPath.push('browser-early-empty');
         }
@@ -194,7 +196,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       }
       const candidates=discovered.length ? discovered : [source.baseUrl];
       const succeeded=await browserFallback(candidates,false);
-      return {offers,coverage:coverage(succeeded?'browser':'failed',succeeded?'Browserless rendered-page fallback succeeded':'No parseable data after Browserless fallback')};
+      return {offers,coverage:coverage(succeeded?'browser':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':'No parseable data after Browserless fallback')};
     }
     const status = discovered.length>1?'success':'partial';
     return {offers,coverage:coverage(status,'Direct crawl produced parseable product data')};
