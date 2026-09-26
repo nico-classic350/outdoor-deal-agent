@@ -2,55 +2,46 @@
 
 Personal crawler and scoring service for the outdoor-deal search.
 
-## Production pipeline
+## Architecture
 
-The Vercel Hobby deployment uses a batched daily crawl. Each batch persists normalized offers and source coverage in Neon. The finalizer writes a consolidated run only after all expected batches exist.
+The production source is tracked directly in this repository. There is no generated ZIP bootstrap, no build-time source overlay and no `*.override.ts` layer. Vercel and GitHub CI compile the same files that are reviewed in Git.
+
+The daily pipeline runs as 16 Vercel cron batches. Each batch crawls up to six sources with bounded concurrency and persists normalized offers plus source coverage in Neon PostgreSQL. The finalizer publishes a consolidated run only when all expected batches exist; a retry finalizer provides a second completion attempt.
+
+Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, and optional external Browserless fallback. Heavy local Chromium/Playwright dependencies are intentionally excluded.
 
 ## Deal quality gates
 
 - Only eligible men's long outdoor trousers enter the shortlist; ski, winter, rain, zip-off, shorts and tights are rejected.
-- Missing size data does not suppress an otherwise strong deal. Unknown sizes remain visible as unverified; only explicit incompatible size evidence is a hard exclusion. Confirmed W33/W34 with inseam at most L32 still receives the highest size score.
-- Offers with the same merchant and product URL are collapsed even when listing-card titles differ. Tracking parameters do not create extra products.
-- The coverage report separates technical source status from screened, distinct and size-confirmed offers. A successful fetch does not imply usable deals.
-- Listing cards are discovery evidence; the crawler does not infer live size availability from them. Only explicit variant sizes can confirm a match.
+- Missing optional data does not suppress an otherwise strong deal. Explicit incompatible evidence remains a hard exclusion.
+- Offers with the same merchant and canonical product URL are collapsed.
+- Listing cards are discovery evidence; live size availability is only confirmed from explicit variant data.
+- Deal classification and scoring are deterministic TypeScript rules, not LLM decisions.
 
-## Build quality
+## Build and CI
 
-- Node and pnpm versions are pinned.
-- CI installs with `pnpm install --frozen-lockfile`.
-- `pnpm run preflight` prepares the archived source, validates deployment invariants, runs TypeScript, tests and a full Next.js build.
-- TypeScript validation is enabled; build errors are not ignored.
-- `scripts/prepare-build.mjs` extracts the legacy source archive into a staging directory and copies only explicit source files. The profile and deal-quality modules are tracked directly so a build cannot restore older acceptance rules. It never overwrites package, lockfile, Vercel or TypeScript configuration.
-- `scripts/validate-config.mjs` prevents source-count / cron-count drift, accidental monolithic cron activation, missing cron authorization, browser-runtime regressions, Node/pnpm version drift, and accidental re-enabling of Vercel preview deployments.
+- Node 24.x and pnpm 10.15.1 are pinned.
+- GitHub CI installs with `pnpm install --frozen-lockfile`.
+- `pnpm run preflight` validates deployment invariants, runs TypeScript, tests and a full Next.js build.
+- TypeScript errors fail the build.
+- `scripts/validate-config.mjs` checks direct-source integrity, shop/batch/cron consistency, cron authorization, runtime budgets and Vercel deployment policy.
+- The validator explicitly fails if the legacy ZIP, source-preparation script or root override files are reintroduced.
 
 ## Release workflow
 
-All non-`main` Git branches are blocked from automatic Vercel deployment. This is intentional: Vercel preview deployments previously failed before build start while provisioning integration resources, even though the exact same code passed GitHub CI and deployed successfully to production.
+All non-`main` Git branches are blocked from automatic Vercel deployment. Changes are developed on internal/release branches and validated by GitHub CI through a pull request. After green CI, the tested change is merged to `main`; only `main` triggers Vercel production deployment.
 
-For every change:
-
-```bash
-pnpm install --frozen-lockfile
-pnpm run preflight
-```
-
-Use an `internal-*`, `scratch-*` or `release-*` branch and open a pull request to `main`. GitHub CI is the pre-production gate and runs the same dependency install, configuration validation, TypeScript checks, tests and full Next.js build. Do not rely on Vercel Preview as a release gate for this project.
-
-Only after the pull-request CI is green should the change be merged. Vercel automatically deploys only `main`, so Marketplace/database integration provisioning happens only for the production deployment instead of once per temporary branch.
-
-The config guard requires `git.deploymentEnabled` to have `"*": false` and `"main": true`; CI fails if a future change weakens that rule.
+This avoids the previous Vercel preview integration-provisioning failure mode while keeping full pre-production build validation in GitHub Actions.
 
 ## Runtime safeguards
 
-- Monolithic full-crawl routes are retired because they exceed the Vercel Hobby function limit.
+- Monolithic full-crawl routes are retired.
 - Each source has a wall-clock budget and generic crawling has a URL cap.
-- The heavy local Chromium fallback is removed from the serverless bundle. An external `BROWSERLESS_CONTENT_URL` can optionally enable browser rendering later.
 - Batch writes are idempotent per date/index.
-- Finalization is idempotent per run date and refuses to publish incomplete daily runs.
-- A second finalizer cron retries one hour later if the first attempt ran before every batch was present.
-- `/api/health` checks database reachability and, after the daily grace window, treats missing batches or a missing finalized run as unhealthy.
+- Finalization is idempotent per run date and refuses to publish incomplete runs.
+- `/api/health` verifies database reachability and daily pipeline completeness.
 - Read-only status endpoints use short CDN caching where appropriate.
 
-## Optional Awin
+## Optional integrations
 
-Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Prepared mappings currently include Bergfreunde, Bergzeit, SportScheck, Sport Bittl, engelhorn, INTERSPORT DE, DECATHLON DE, GALERIA, Hardloop, Breuninger, Blue Tomato and sportdeal24.
+Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browser rendering is optional through `BROWSERLESS_CONTENT_URL` and is not bundled into the serverless application.
