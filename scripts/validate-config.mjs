@@ -14,11 +14,14 @@ const ciWorkflow=read('.github/workflows/ci.yml');
 const shopsSource=read('config/shops.ts');
 const batchRun=read('lib/batch-run.ts');
 const crawl=read('lib/crawl.ts');
+const browserSource=read('lib/browser.ts');
+const browserConfig=read('lib/browser-config.mjs');
+const agentState=read('docs/AGENT_STATE.md');
 
 const requiredDirect=[
   'config/profile.ts','config/shops.ts','lib/types.ts','lib/crawl.ts','lib/extract.ts','lib/feed.ts','lib/fx.ts',
-  'lib/targeted.ts','lib/globetrotter-feed.ts','lib/awin-feed.ts','lib/browser.ts','lib/store.ts',
-  'lib/normalize.ts','lib/size.ts','lib/fit.ts','lib/score.ts','lib/batch-run.ts'
+  'lib/targeted.ts','lib/globetrotter-feed.ts','lib/awin-feed.ts','lib/browser.ts','lib/browser-config.mjs','lib/store.ts',
+  'lib/normalize.ts','lib/size.ts','lib/fit.ts','lib/score.ts','lib/batch-run.ts','docs/AGENT_STATE.md'
 ];
 for(const p of requiredDirect) assert(existsSync(full(p)),`direct source exists: ${p}`);
 
@@ -38,6 +41,14 @@ assert(packageJson.engines?.node===`${nodeVersion}.x`,'Node engine matches .node
 assert(!/ignoreBuildErrors\s*:\s*true/.test(nextConfig),'TypeScript build errors are not ignored');
 assert(packageJson.scripts?.ci?.includes('preflight'),'CI delegates to the full preflight');
 assert(packageJson.scripts?.build?.includes('validate:config'),'Vercel build validates deployment configuration');
+
+assert(packageJson.dependencies?.['playwright-core'],'remote browser automation uses playwright-core');
+assert(!packageJson.dependencies?.playwright,'full Playwright browser package is not bundled');
+assert(browserSource.includes('connectOverCDP'),'Browserless Playwright uses remote CDP');
+assert(!browserSource.includes('chromium.launch('),'browser code never launches local Chromium');
+assert(browserSource.includes('browserWSEndpoint'),'blocked-page flow supports Browserless session handoff');
+assert(/BROWSERLESS_API_TOKEN/.test(browserConfig)&&/BROWSERLESS_TOKEN/.test(browserConfig),'Browserless token is read only from environment');
+assert(agentState.includes('Starting a fresh ChatGPT chat'),'durable project handoff documents fresh-chat recovery');
 
 assert(/pull_request:/.test(ciWorkflow)&&/branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates pull requests to main');
 assert(/push:[\s\S]*branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates main');
