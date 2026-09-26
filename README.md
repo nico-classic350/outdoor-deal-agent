@@ -21,20 +21,24 @@ The Vercel Hobby deployment uses a batched daily crawl. Each batch persists norm
 - `pnpm run preflight` prepares the archived source, validates deployment invariants, runs TypeScript, tests and a full Next.js build.
 - TypeScript validation is enabled; build errors are not ignored.
 - `scripts/prepare-build.mjs` extracts the legacy source archive into a staging directory and copies only explicit source files. The profile and deal-quality modules are tracked directly so a build cannot restore older acceptance rules. It never overwrites package, lockfile, Vercel or TypeScript configuration.
-- `scripts/validate-config.mjs` prevents source-count / cron-count drift, accidental monolithic cron activation, missing cron authorization, browser-runtime regressions and Node/pnpm version drift.
+- `scripts/validate-config.mjs` prevents source-count / cron-count drift, accidental monolithic cron activation, missing cron authorization, browser-runtime regressions, Node/pnpm version drift, and accidental re-enabling of Vercel preview deployments.
 
 ## Release workflow
 
-Unfinished work must use an `internal-*` or `scratch-*` branch. Those branches, plus the old `stabilize-agent` and `agent-test-run` branches, are blocked from Vercel deployment and do not trigger push CI.
+All non-`main` Git branches are blocked from automatic Vercel deployment. This is intentional: Vercel preview deployments previously failed before build start while provisioning integration resources, even though the exact same code passed GitHub CI and deployed successfully to production.
 
-Before any release branch is pushed, run:
+For every change:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run preflight
 ```
 
-Only a locally green `release-*` commit should be pushed. Open a pull request to `main`, require the PR CI and Vercel Preview to be green, then merge the exact tested commit. Production is deployed from `main`.
+Use an `internal-*`, `scratch-*` or `release-*` branch and open a pull request to `main`. GitHub CI is the pre-production gate and runs the same dependency install, configuration validation, TypeScript checks, tests and full Next.js build. Do not rely on Vercel Preview as a release gate for this project.
+
+Only after the pull-request CI is green should the change be merged. Vercel automatically deploys only `main`, so Marketplace/database integration provisioning happens only for the production deployment instead of once per temporary branch.
+
+The config guard requires `git.deploymentEnabled` to have `"*": false` and `"main": true`; CI fails if a future change weakens that rule.
 
 ## Runtime safeguards
 
