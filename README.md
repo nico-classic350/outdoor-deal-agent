@@ -33,6 +33,18 @@ All non-`main` Git branches are blocked from automatic Vercel deployment. Work-i
 
 This avoids both previous failure classes: Vercel preview integration-provisioning errors and GitHub failure emails from unfinished intermediate PR commits.
 
+## Change observability
+
+Every non-draft PR and every push to `main` produces a persistent change-observability record in GitHub Actions.
+
+**Before the build** the workflow records the base/head commit, changed files, diff statistics and a focused patch for deployment-, dependency-, crawler-, scoring-, configuration- and API-related files.
+
+**During the build** the exact toolchain, frozen-lockfile install output and full `pnpm run preflight` output are captured. The workflow always publishes a GitHub job summary and uploads the complete observability directory as a 30-day workflow artifact, including failure cases.
+
+**After a successful merge to `main`** a dedicated production-observability job waits until `/api/health` reports the exact merged Git SHA from Vercel. It then validates production HTTP health, Neon reachability, the shop registry and the read-only `/api/probe` Fast Replay. Health, registry, probe and verification summaries are stored as workflow artifacts. If Vercel does not deploy the expected SHA within the bounded wait window, or health/probe checks fail, the production-observability job fails with the last observed state preserved for diagnosis.
+
+This creates a single trace from code diff -> CI/preflight -> Vercel deployment -> production health/probe. GitHub/Vercel logs can therefore be inspected directly without relying on screenshots or manual reconstruction.
+
 ## Runtime safeguards
 
 - Monolithic full-crawl routes are retired.
