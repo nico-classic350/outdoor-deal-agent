@@ -29,9 +29,9 @@ Source acquisition order is: official product feed/API where available, Awin pro
 
 ## Release workflow
 
-All non-`main` Git branches are blocked from automatic Vercel deployment. Changes are developed on internal/release branches and validated by GitHub CI through a pull request. After green CI, the tested change is merged to `main`; only `main` triggers Vercel production deployment.
+All non-`main` Git branches are blocked from automatic Vercel deployment. Work-in-progress changes should be kept in a **draft pull request**. Draft pull requests do not run the expensive `verify` CI job, so intermediate commits cannot generate misleading failure notifications. Once the branch is complete, mark the PR **Ready for review**; GitHub then runs the full frozen-lockfile/preflight/build gate. After green CI, merge the tested change to `main`; only `main` triggers Vercel production deployment.
 
-This avoids the previous Vercel preview integration-provisioning failure mode while keeping full pre-production build validation in GitHub Actions.
+This avoids both previous failure classes: Vercel preview integration-provisioning errors and GitHub failure emails from unfinished intermediate PR commits.
 
 ## Runtime safeguards
 
