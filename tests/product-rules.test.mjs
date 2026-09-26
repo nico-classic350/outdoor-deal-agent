@@ -5,6 +5,9 @@ import { productEligible, sizeEvidence, selectOffers, dealTier } from '../lib/pr
 test('rejects explicit product mismatches while allowing eligible outdoor trousers', () => {
   assert.equal(productEligible('Odlo Zeroweight Pro Windproof Warm Tights Langlaufhose'), false);
   assert.equal(productEligible('Herren Mercury DST Hose', 'Softshellhose für lange, klassische Skitouren'), false);
+  assert.equal(productEligible('adidas Terrex Xperior Fast Pants Skitourenhose'), false);
+  assert.equal(productEligible('Herren Langlaufhose'), false);
+  assert.equal(productEligible('Herren Winterhose'), false);
   assert.equal(productEligible('Herren Korp Lite Hose', 'Leicht elastische Hose für Trekkingtouren'), true);
   assert.equal(productEligible('Herren Outdoorhose', 'Leichte Wanderhose für Reisen'), true);
   assert.equal(productEligible('Damen Wanderhose'), false);
