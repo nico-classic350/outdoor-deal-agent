@@ -64,22 +64,37 @@ export function extractJsonLd(html:string, source:ShopSource, pageUrl:string):Ra
 
 export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:string):RawOffer[]{
   const $=cheerio.load(html); const out:RawOffer[]=[]; const seen=new Set<string>();
-  const cards=$('article, [itemtype*="Product"], [class*="product-card"], [class*="product-tile"], [data-testid*="product"]');
+  const cards=$( [
+    'article', '[itemtype*="Product"]', '[class*="product-card"]', '[class*="productCard"]',
+    '[class*="product-tile"]', '[class*="productTile"]', '[class*="product-item"]', '[class*="productItem"]',
+    '[data-testid*="product"]', '[data-product-id]', '[data-product-sku]'
+  ].join(',') );
   cards.slice(0,120).each((_,el)=>{
-    const card=$(el); const a=card.find('a[href]').first(); const url=absolute(pageUrl,a.attr('href')); if(!url||seen.has(url)) return;
+    const card=$(el);
+    const a=card.find('a[href]').first();
+    const url=absolute(pageUrl,a.attr('href')); if(!url||seen.has(url)) return;
     const blob=text(card.text()); if(blob.length<8) return;
-    const values=[...blob.matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)]
+
+    const explicitPriceValues = card.find('[itemprop="price"], [data-price], [data-testid*="price"], [class*="price"]').map((_,node)=>{
+      const item=$(node);
+      return num(item.attr('content') || item.attr('data-price') || item.text());
+    }).get().filter((x):x is number=>Boolean(x));
+    const currencyValues=[...blob.matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)]
       .map(m=>num(m[1])).filter((x):x is number=>Boolean(x));
+    const values=[...explicitPriceValues,...currencyValues].filter(x=>x>0);
     if(!values.length) return;
+
     const price=Math.min(...values), rrp=values.length>1?Math.max(...values):undefined;
-    let name=text(card.find('[itemprop="name"],h2,h3,h4,[class*="title"],[class*="name"]').first().text())||text(a.text());
+    let name=text(card.find('[itemprop="name"],[data-testid*="name"],[data-testid*="title"],h2,h3,h4,[class*="title"],[class*="name"]').first().text())||text(a.text());
     if(!name) return;
-    const brand=text(card.find('[itemprop="brand"],[class*="brand"]').first().text())||undefined;
-    const img=card.find('img').first(); const image=img.attr('src')||img.attr('data-src')||img.attr('srcset')?.split(/\s+/)[0];
+    const brand=text(card.find('[itemprop="brand"],[data-testid*="brand"],[class*="brand"]').first().text())||undefined;
+    const img=card.find('img').first();
+    const srcset=img.attr('srcset')||img.attr('data-srcset')||card.find('source[srcset]').first().attr('srcset');
+    const image=img.attr('src')||img.attr('data-src')||img.attr('data-lazy-src')||srcset?.split(',')[0]?.trim().split(/\s+/)[0];
     seen.add(url);
     out.push({sourceId:source.id,merchant:source.name,merchantCountry:source.country,url,
-      imageUrl:absolute(pageUrl,image)||undefined,brand,name,currency:'EUR',price,rrp,
-      availability:/ausverkauft|sold out|out of stock|nicht verfügbar/i.test(blob)?'out_of_stock':'unknown',
+      imageUrl:absolute(pageUrl,image)||undefined,brand,name,currency:'EUR',price,rrp:rrp&&rrp>price?rrp:undefined,
+      availability:/ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(blob)?'out_of_stock':'unknown',
       description:blob.slice(0,800),sizes:[]});
   });
   return out;
