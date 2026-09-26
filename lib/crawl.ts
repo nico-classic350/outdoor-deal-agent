@@ -2,7 +2,7 @@ import { ShopSource, RawOffer, SourceCoverage } from './types';
 import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
-import { browserExtract, browserFallbackConfigured } from './browser';
+import { browserExtract, browserFallbackConfigured, browserFallbackMode } from './browser';
 import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
@@ -11,6 +11,7 @@ const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invali
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
+const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 
 async function get(url:string, ms=10000){
   return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(ms)});
@@ -45,6 +46,23 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
   });
+  const browserFallback = async (urls:string[], blocked=false) => {
+    technicalPath.push('browser-fallback',`browser-mode-${browserFallbackMode()}`);
+    for(const url of [...new Set(urls)].slice(0,BROWSER_FALLBACK_URL_LIMIT)){
+      if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
+      const result=await browserExtract(source,url,{blocked});
+      if(result.httpStatus) httpStatuses.push(result.httpStatus);
+      if(result.mode!=='none') technicalPath.push(`browser-${result.mode}`);
+      if(result.offers.length){
+        offers.push(...result.offers);
+        technicalPath.push('browser-success');
+      } else {
+        technicalPath.push('browser-empty');
+      }
+      if(offers.length) break;
+    }
+    return offers.length>0;
+  };
 
   try{
     if(source.id==='globetrotter'){
@@ -132,12 +150,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           technicalPath.push(`http-${r.status}`);
           if(!browserFallbackConfigured()){
             technicalPath.push('browser-fallback-disabled');
-            return {offers,coverage:coverage('blocked',`HTTP ${r.status}; browser fallback not configured`)};
+            return {offers,coverage:coverage('blocked',`HTTP ${r.status}; Browserless token not configured`)};
           }
-          technicalPath.push('browser-fallback');
-          const bx=await browserExtract(source,url); offers.push(...bx);
-          if(bx.length) technicalPath.push('browser-success'); else technicalPath.push('browser-failed');
-          return {offers,coverage:coverage(bx.length?'browser':'blocked',bx.length?'Browser fallback succeeded':`HTTP ${r.status}; browser fallback failed`)};
+          const succeeded=await browserFallback([url],true);
+          return {offers,coverage:coverage(succeeded?'browser':'blocked',succeeded?'Browserless unblock fallback succeeded':`HTTP ${r.status}; Browserless fallback returned no parseable product data`)};
         }
         if(!r.ok) continue;
         const html=await r.text();
@@ -156,12 +172,11 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
     if(!offers.length){
       if(!browserFallbackConfigured()){
         technicalPath.push('browser-fallback-disabled');
-        return {offers,coverage:coverage('failed','No parseable data; browser fallback not configured')};
+        return {offers,coverage:coverage('failed','No parseable data; Browserless token not configured')};
       }
-      technicalPath.push('browser-fallback');
-      const bx=await browserExtract(source,source.baseUrl); offers.push(...bx);
-      if(bx.length) technicalPath.push('browser-success'); else technicalPath.push('browser-failed');
-      return {offers,coverage:coverage(bx.length?'browser':'failed',bx.length?'Browser fallback succeeded':'No parseable data after browser fallback')};
+      const candidates=discovered.length ? discovered : [source.baseUrl];
+      const succeeded=await browserFallback(candidates,false);
+      return {offers,coverage:coverage(succeeded?'browser':'failed',succeeded?'Browserless rendered-page fallback succeeded':'No parseable data after Browserless fallback')};
     }
     const status = discovered.length>1?'success':'partial';
     return {offers,coverage:coverage(status,'Direct crawl produced parseable product data')};
