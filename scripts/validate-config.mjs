@@ -45,12 +45,21 @@ const deploymentEnabled=vercel.git?.deploymentEnabled||{};
 assert(deploymentEnabled['*']===false,'Vercel disables all non-main Git deployments by default');
 assert(deploymentEnabled.main===true,'Vercel allows automatic production deployment from main');
 
-const shopRows=[...shopsSource.matchAll(/^[a-z0-9-]+\|[^\n]+\|(?:1|2|3)$/gm)];
-assert(shopRows.length===91,`shop registry contains expected 91 sources (found ${shopRows.length})`);
+const dataMatch=shopsSource.match(/const DATA\s*=\s*`([\s\S]*?)`;/);
+const shopLines=dataMatch?dataMatch[1].trim().split('\n').filter(Boolean):[];
+const malformedShopLines=shopLines.filter(line=>{
+  const parts=line.split('|');
+  return parts.length!==5 || !/^[A-Z]{2}$/.test(parts[2]) || !/^https?:\/\//.test(parts[3]) || !/^[123]$/.test(parts[4]);
+});
+assert(shopLines.length===91,`shop registry contains expected 91 sources (found ${shopLines.length})`);
+assert(malformedShopLines.length===0,`shop registry rows are structurally valid (invalid ${malformedShopLines.length})`);
+const duplicateIds=shopLines.map(line=>line.split('|')[0]).filter((id,index,all)=>all.indexOf(id)!==index);
+assert(duplicateIds.length===0,'shop registry IDs are unique');
+
 const batchSizeMatch=batchRun.match(/BATCH_SIZE\s*=\s*(\d+)/);
 assert(Boolean(batchSizeMatch),'batch size is statically discoverable');
 const batchSize=batchSizeMatch?Number(batchSizeMatch[1]):0;
-const expectedBatches=batchSize?Math.ceil(shopRows.length/batchSize):0;
+const expectedBatches=batchSize?Math.ceil(shopLines.length/batchSize):0;
 const crons=Array.isArray(vercel.crons)?vercel.crons:[];
 const batchCronIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/batch\/(\d+)$/)).filter(Boolean).map(m=>Number(m[1])).sort((a,b)=>a-b);
 const expectedIndexes=Array.from({length:expectedBatches},(_,i)=>i);
@@ -75,4 +84,4 @@ assert(Boolean(sourceBudget),'source runtime budget is configured');
 if(sourceBudget) assert(Number(sourceBudget)<=60000,'default source runtime budget is at most 60 seconds');
 
 if(errors.length){ console.error('[validate-config] FAILED'); for(const e of errors) console.error(` - ${e}`); process.exit(1); }
-console.log(`[validate-config] OK: ${ok.length} checks; shops=${shopRows.length}; batches=${expectedBatches}; source=direct`);
+console.log(`[validate-config] OK: ${ok.length} checks; shops=${shopLines.length}; batches=${expectedBatches}; source=direct`);
