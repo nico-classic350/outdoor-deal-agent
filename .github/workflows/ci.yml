@@ -1,4 +1,4 @@
-name: CI
+name: CI & Change Observability
 
 on:
   pull_request:
@@ -23,19 +23,158 @@ jobs:
   verify:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+
+      - name: Capture pre-change snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p observability
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"
+          fi
+          {
+            echo "event=${{ github.event_name }}"
+            echo "base_sha=${BASE_SHA}"
+            echo "head_sha=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+          } > observability/change-context.txt
+          git diff --name-status "${BASE_SHA}" "${GITHUB_SHA}" > observability/changed-files.txt || true
+          git diff --stat "${BASE_SHA}" "${GITHUB_SHA}" > observability/change-stat.txt || true
+          git diff "${BASE_SHA}" "${GITHUB_SHA}" -- package.json pnpm-lock.yaml vercel.json .github/workflows scripts config lib app/api > observability/critical-diff.patch || true
+          {
+            echo "# Change snapshot"
+            echo
+            echo "- Event: ${{ github.event_name }}"
+            echo "- Base: \`${BASE_SHA}\`"
+            echo "- Head: \`${GITHUB_SHA}\`"
+            echo "- Changed files: $(wc -l < observability/changed-files.txt | tr -d ' ')"
+            echo
+            echo "## Changed files"
+            echo '```text'
+            cat observability/changed-files.txt
+            echo '```'
+          } > observability/change-summary.md
+          cat observability/change-summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10.15.1
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Capture toolchain
+        shell: bash
+        run: |
+          {
+            echo "node=$(node --version)"
+            echo "pnpm=$(pnpm --version)"
+            echo "git=$(git --version)"
+          } | tee observability/toolchain.txt
+
       - name: Install exact dependency graph
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm install --frozen-lockfile 2>&1 | tee observability/install.log
+
       - name: Full preflight
-        run: pnpm run preflight
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run preflight 2>&1 | tee observability/preflight.log
+
+      - name: Publish CI diagnostics summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo
+            echo "## CI diagnostics"
+            echo "- Verify result: **${{ job.status }}**"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            if [ -f observability/preflight.log ]; then
+              echo
+              echo "### Preflight tail"
+              echo '```text'
+              tail -n 120 observability/preflight.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload change observability artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: change-observability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: observability/
+          if-no-files-found: warn
+          retention-days: 30
+
+  production-observability:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify exact commit reached production
+        shell: bash
+        env:
+          PRODUCTION_BASE_URL: https://outdoor-deal-agent.vercel.app
+          PRODUCTION_VERIFY_TIMEOUT_MS: 480000
+          PRODUCTION_VERIFY_INTERVAL_MS: 10000
+        run: |
+          set -o pipefail
+          mkdir -p observability
+          node scripts/verify-production.mjs 2>&1 | tee observability/production-verify.log
+
+      - name: Publish post-deploy summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Post-deploy observability"
+            echo
+            echo "- Commit expected in production: \`${GITHUB_SHA}\`"
+            echo "- Verification result: **${{ job.status }}**"
+            if [ -f observability/production-verify-summary.json ]; then
+              echo
+              echo '```json'
+              cat observability/production-verify-summary.json
+              echo '```'
+            elif [ -f observability/production-verify-failure.json ]; then
+              echo
+              echo '```json'
+              cat observability/production-verify-failure.json
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload production observability artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-observability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: observability/
+          if-no-files-found: warn
+          retention-days: 30
