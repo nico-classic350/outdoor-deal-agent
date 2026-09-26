@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { BATCH_COUNT } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
+import { browserFallbackConfig } from '../../../lib/browser-config.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,13 +13,17 @@ export async function GET() {
   const runDate = now.toISOString().slice(0, 10);
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const pipelineExpectedComplete = utcMinutes >= 7 * 60 + 30;
+  const browser = browserFallbackConfig();
 
   const base = {
     deploymentSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
     sourceCount: SHOPS.length,
     expectedBatches: BATCH_COUNT,
     awinConfigured: Boolean(process.env.AWIN_DATAFEED_API_KEY),
-    browserFallbackConfigured: Boolean(process.env.BROWSERLESS_CONTENT_URL),
+    browserFallbackConfigured: browser.configured,
+    browserFallbackMode: browser.mode,
+    browserFallbackRegion: browser.baseUrl ? new URL(browser.baseUrl).hostname : null,
+    browserUnblockEnabled: browser.useUnblock,
     runDate,
     pipelineExpectedComplete,
   };
