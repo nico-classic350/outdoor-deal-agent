@@ -55,6 +55,8 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - Direct 403/429 responses use Browserless `/unblock`; if rendered HTML still cannot be parsed, the unblocked browser session can be handed directly to Playwright instead of starting over.
 - HTTP 200 pages with no parseable products use `/content`, then remote Playwright only when necessary.
 - Browser extraction handles common consent dialogs, lazy loading, bounded “load more” controls and single-product size controls.
+- Direct HTTP and Browserless calls use the same per-shop deadline; coverage records the attempted browser stages and elapsed time per stage.
+- `pnpm smoke:browser` runs a read-only five-shop crawl with a locally supplied Browserless token and reports each shop's coverage without touching Neon.
 - Batch writes are idempotent per date/index.
 - Finalization is idempotent per run date and refuses to publish incomplete runs.
 - `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials.
