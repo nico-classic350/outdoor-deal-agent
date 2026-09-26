@@ -2,13 +2,15 @@
 
 Personal crawler and scoring service for the outdoor-deal search.
 
+For a compact cross-chat project handoff, read `docs/AGENT_STATE.md` first.
+
 ## Architecture
 
 The production source is tracked directly in this repository. There is no generated ZIP bootstrap, no build-time source overlay and no `*.override.ts` layer. Vercel and GitHub CI compile the same files that are reviewed in Git.
 
 The daily pipeline runs as 16 Vercel cron batches. Each batch crawls up to six sources with bounded concurrency and persists normalized offers plus source coverage in Neon PostgreSQL. The finalizer publishes a consolidated run only when all expected batches exist; a retry finalizer provides a second completion attempt.
 
-Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, and Browserless Cloud as the browser-rendering fallback for JS-heavy or blocked pages. Heavy local Chromium/Playwright dependencies are intentionally excluded.
+Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, Browserless REST rendering/unblocking and finally remote Playwright for difficult rendered or interactive pages. No local Chromium or browser binaries are bundled; `playwright-core` is only the remote-control client.
 
 ## Deal quality gates
 
@@ -24,8 +26,8 @@ Source acquisition order is: official product feed/API where available, Awin pro
 - GitHub CI installs with `pnpm install --frozen-lockfile`.
 - `pnpm run preflight` validates deployment invariants, runs TypeScript, tests and a full Next.js build.
 - TypeScript errors fail the build.
-- `scripts/validate-config.mjs` checks direct-source integrity, shop/batch/cron consistency, cron authorization, runtime budgets and Vercel deployment policy.
-- The validator explicitly fails if the legacy ZIP, source-preparation script or root override files are reintroduced.
+- `scripts/validate-config.mjs` checks direct-source integrity, shop/batch/cron consistency, cron authorization, runtime budgets, remote-browser architecture and Vercel deployment policy.
+- The validator explicitly fails if the legacy ZIP/source-preparation layer or a full local Playwright browser package is reintroduced.
 
 ## Release workflow
 
@@ -50,22 +52,27 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - Monolithic full-crawl routes are retired.
 - Each source has a wall-clock budget and generic crawling has a URL cap.
 - Browser fallback is capped to a small number of candidate URLs per failed source.
-- Direct 403/429 responses use Browserless `/unblock`; normal JS-rendered pages use `/content`.
+- Direct 403/429 responses use Browserless `/unblock`; if rendered HTML still cannot be parsed, the unblocked browser session can be handed directly to Playwright instead of starting over.
+- HTTP 200 pages with no parseable products use `/content`, then remote Playwright only when necessary.
+- Browser extraction handles common consent dialogs, lazy loading, bounded “load more” controls and single-product size controls.
 - Batch writes are idempotent per date/index.
 - Finalization is idempotent per run date and refuses to publish incomplete runs.
-- `/api/health` verifies database reachability, daily pipeline completeness and the browser fallback mode without exposing credentials.
+- `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials.
 - Read-only status endpoints use short CDN caching where appropriate.
 
 ## Browserless fallback
 
-Set `BROWSERLESS_API_TOKEN` in Vercel Production. The default endpoint is the Amsterdam Browserless Cloud region (`https://production-ams.browserless.io`) and can be overridden with `BROWSERLESS_BASE_URL`.
+Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The default endpoint is the Amsterdam Browserless Cloud region (`https://production-ams.browserless.io`) and can be overridden with `BROWSERLESS_BASE_URL`.
 
-- `/content` renders JavaScript-heavy pages and returns HTML for the existing JSON-LD/HTML extractors.
-- `/unblock` is enabled by default for direct 403/429 responses and as a secondary fallback when rendered HTML still yields no product data.
+- `/content` renders JavaScript-heavy pages and returns HTML for the JSON-LD/HTML extractors.
+- `/unblock` handles direct 403/429 responses.
+- When `/unblock` content is not enough, Browserless can return a live `browserWSEndpoint`; `playwright-core` attaches with `connectOverCDP()` to the same already-unblocked session.
+- If no reusable unblock session is available, a fresh remote Browserless Playwright session is the final bounded fallback.
 - `BROWSER_FALLBACK_URL_LIMIT` defaults to 2 (max 3) to protect runtime and Browserless unit usage.
-- `BROWSERLESS_PROXY` can optionally be set to `residential` or `datacenter` for especially protected shops, but is intentionally empty by default because proxy traffic consumes additional units.
+- `BROWSERLESS_PROXY` can optionally be set for especially protected shops, but is intentionally empty by default because proxy traffic consumes additional units.
+- `BROWSERLESS_UNBLOCK=false` or `BROWSERLESS_PLAYWRIGHT=false` can disable either escalation layer independently.
 - The legacy `BROWSERLESS_CONTENT_URL` remains supported and takes precedence if present.
 
 ## Optional integrations
 
-Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the recommended remote browser layer and does not add Chromium or Playwright to the Vercel bundle.
+Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the remote browser layer; the application bundles only `playwright-core`, never a local browser binary.

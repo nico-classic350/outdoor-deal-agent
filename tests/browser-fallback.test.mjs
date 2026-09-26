@@ -24,6 +24,16 @@ test('Browserless Cloud token selects Amsterdam REST and Playwright endpoints', 
   assert.equal(cfg.usePlaywright, true);
 });
 
+test('BROWSERLESS_TOKEN alias and explicit base URL are supported', () => {
+  const cfg = browserFallbackConfig({
+    BROWSERLESS_TOKEN: 'secret',
+    BROWSERLESS_BASE_URL: 'https://production-sfo.browserless.io/',
+  });
+  assert.equal(cfg.configured, true);
+  assert.equal(cfg.baseUrl, 'https://production-sfo.browserless.io');
+  assert.match(cfg.playwrightUrl, /^wss:\/\/production-sfo\.browserless\.io\?/);
+});
+
 test('legacy content URL remains supported without Playwright', () => {
   const cfg = browserFallbackConfig({ BROWSERLESS_CONTENT_URL: 'https://example.test/content?token=x' });
   assert.equal(cfg.configured, true);
