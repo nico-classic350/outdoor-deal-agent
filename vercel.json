@@ -25,7 +25,6 @@
     { "path": "/api/batch/14", "schedule": "0 3 * * *" },
     { "path": "/api/batch/15", "schedule": "0 3 * * *" },
     { "path": "/api/finalize", "schedule": "0 4 * * *" },
-    { "path": "/api/finalize-retry", "schedule": "0 5 * * *" },
-    { "path": "/api/browser-smoke", "schedule": "0 18 * * *" }
+    { "path": "/api/finalize-retry", "schedule": "0 5 * * *" }
   ]
 }
