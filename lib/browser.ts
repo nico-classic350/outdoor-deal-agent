@@ -134,8 +134,8 @@ export async function browserExtract(
     const playwright = await playwrightRequest(source, url, false);
     if (playwright.offers.length) return playwright;
 
-    const unblock = await unblockRequest(source, url);
-    if (unblock.offers.length) return unblock;
+    // A normal HTTP 200 page does not benefit from an anti-bot unblock pass.
+    // Stop after rendered content + Playwright to keep the fallback bounded.
     return playwright.mode !== 'none' ? playwright : content;
   } catch {
     return { offers: [], mode: 'none' };
