@@ -8,7 +8,7 @@ The production source is tracked directly in this repository. There is no genera
 
 The daily pipeline runs as 16 Vercel cron batches. Each batch crawls up to six sources with bounded concurrency and persists normalized offers plus source coverage in Neon PostgreSQL. The finalizer publishes a consolidated run only when all expected batches exist; a retry finalizer provides a second completion attempt.
 
-Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, and optional external Browserless fallback. Heavy local Chromium/Playwright dependencies are intentionally excluded.
+Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, and Browserless Cloud as the browser-rendering fallback for JS-heavy or blocked pages. Heavy local Chromium/Playwright dependencies are intentionally excluded.
 
 ## Deal quality gates
 
@@ -49,11 +49,23 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 
 - Monolithic full-crawl routes are retired.
 - Each source has a wall-clock budget and generic crawling has a URL cap.
+- Browser fallback is capped to a small number of candidate URLs per failed source.
+- Direct 403/429 responses use Browserless `/unblock`; normal JS-rendered pages use `/content`.
 - Batch writes are idempotent per date/index.
 - Finalization is idempotent per run date and refuses to publish incomplete runs.
-- `/api/health` verifies database reachability and daily pipeline completeness.
+- `/api/health` verifies database reachability, daily pipeline completeness and the browser fallback mode without exposing credentials.
 - Read-only status endpoints use short CDN caching where appropriate.
+
+## Browserless fallback
+
+Set `BROWSERLESS_API_TOKEN` in Vercel Production. The default endpoint is the Amsterdam Browserless Cloud region (`https://production-ams.browserless.io`) and can be overridden with `BROWSERLESS_BASE_URL`.
+
+- `/content` renders JavaScript-heavy pages and returns HTML for the existing JSON-LD/HTML extractors.
+- `/unblock` is enabled by default for direct 403/429 responses and as a secondary fallback when rendered HTML still yields no product data.
+- `BROWSER_FALLBACK_URL_LIMIT` defaults to 2 (max 3) to protect runtime and Browserless unit usage.
+- `BROWSERLESS_PROXY` can optionally be set to `residential` or `datacenter` for especially protected shops, but is intentionally empty by default because proxy traffic consumes additional units.
+- The legacy `BROWSERLESS_CONTENT_URL` remains supported and takes precedence if present.
 
 ## Optional integrations
 
-Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browser rendering is optional through `BROWSERLESS_CONTENT_URL` and is not bundled into the serverless application.
+Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the recommended remote browser layer and does not add Chromium or Playwright to the Vercel bundle.
