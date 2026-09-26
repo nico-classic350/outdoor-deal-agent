@@ -8,24 +8,77 @@
     }
   },
   "crons": [
-    { "path": "/api/batch/0", "schedule": "0 0 * * *" },
-    { "path": "/api/batch/1", "schedule": "0 0 * * *" },
-    { "path": "/api/batch/2", "schedule": "0 0 * * *" },
-    { "path": "/api/batch/3", "schedule": "0 0 * * *" },
-    { "path": "/api/batch/4", "schedule": "0 1 * * *" },
-    { "path": "/api/batch/5", "schedule": "0 1 * * *" },
-    { "path": "/api/batch/6", "schedule": "0 1 * * *" },
-    { "path": "/api/batch/7", "schedule": "0 1 * * *" },
-    { "path": "/api/batch/8", "schedule": "0 2 * * *" },
-    { "path": "/api/batch/9", "schedule": "0 2 * * *" },
-    { "path": "/api/batch/10", "schedule": "0 2 * * *" },
-    { "path": "/api/batch/11", "schedule": "0 2 * * *" },
-    { "path": "/api/batch/12", "schedule": "0 3 * * *" },
-    { "path": "/api/batch/13", "schedule": "0 3 * * *" },
-    { "path": "/api/batch/14", "schedule": "0 3 * * *" },
-    { "path": "/api/batch/15", "schedule": "0 3 * * *" },
-    { "path": "/api/finalize", "schedule": "0 4 * * *" },
-    { "path": "/api/finalize-retry", "schedule": "0 5 * * *" },
-    { "path": "/api/browser-smoke", "schedule": "0 18 * * *" }
+    {
+      "path": "/api/batch/0",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/batch/1",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/batch/2",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/batch/3",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/batch/4",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/batch/5",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/batch/6",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/batch/7",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/batch/8",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/batch/9",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/batch/10",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/batch/11",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/batch/12",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/batch/13",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/batch/14",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/batch/15",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/finalize",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/finalize-retry",
+      "schedule": "0 5 * * *"
+    }
   ]
 }
