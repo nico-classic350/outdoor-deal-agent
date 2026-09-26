@@ -3,10 +3,8 @@
   "framework": "nextjs",
   "git": {
     "deploymentEnabled": {
-      "stabilize-agent": false,
-      "agent-test-run": false,
-      "internal-*": false,
-      "scratch-*": false
+      "*": false,
+      "main": true
     }
   },
   "crons": [

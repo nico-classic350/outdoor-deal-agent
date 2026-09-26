@@ -51,10 +51,10 @@ assert(/pull_request:/.test(ciWorkflow) && /branches:\s*\[main\]/.test(ciWorkflo
 assert(/push:[\s\S]*branches:\s*\[main\]/.test(ciWorkflow), 'GitHub CI validates main');
 
 const deploymentEnabled = vercel.git?.deploymentEnabled || {};
-assert(deploymentEnabled['stabilize-agent'] === false, 'Vercel disables stabilize-agent deployments');
-assert(deploymentEnabled['agent-test-run'] === false, 'Vercel disables obsolete agent-test-run deployments');
-assert(deploymentEnabled['internal-*'] === false, 'Vercel disables internal-* deployments');
-assert(deploymentEnabled['scratch-*'] === false, 'Vercel disables scratch-* deployments');
+assert(deploymentEnabled['*'] === false, 'Vercel disables every non-explicit Git branch deployment');
+assert(deploymentEnabled.main === true, 'Vercel allows automatic deployment only for main');
+assert(Object.entries(deploymentEnabled).filter(([branch, enabled]) => enabled === true && branch !== 'main').length === 0,
+  'Vercel has no additional auto-deploy branches');
 
 const shopRows = [...shopsSource.matchAll(/^\s*\[\s*['"][^'"]+['"]\s*,/gm)];
 assert(shopRows.length > 0, 'shop registry contains sources');
