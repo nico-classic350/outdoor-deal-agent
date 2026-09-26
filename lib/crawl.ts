@@ -12,6 +12,7 @@ const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex',
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
+const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
 
 async function get(url:string, ms=10000){
   return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(ms)});
@@ -42,6 +43,8 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
   const budgetRemaining=()=>Date.now()<deadline;
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
+  let parseEmptyHttp200 = 0;
+  let earlyBrowserTried = false;
   const coverage=(status:SourceCoverage['status'], note?:string):SourceCoverage=>({
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
@@ -163,8 +166,23 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           technicalPath.push('html-fallback');
           x=extractHtmlFallback(html,source,url);
         }
-        if(x.length) technicalPath.push('parsed-product-data');
-        offers.push(...x);
+        if(x.length) {
+          technicalPath.push('parsed-product-data');
+          offers.push(...x);
+          continue;
+        }
+
+        parseEmptyHttp200 += 1;
+        const enoughBudgetForBrowser = deadline - Date.now() > 18000;
+        if (!earlyBrowserTried && browserFallbackConfigured() && parseEmptyHttp200 >= EARLY_BROWSER_EMPTY_HTTP_THRESHOLD && enoughBudgetForBrowser) {
+          earlyBrowserTried = true;
+          technicalPath.push('browser-early-escalation');
+          const succeeded = await browserFallback([url], false);
+          if (succeeded) {
+            return { offers, coverage: coverage('browser', 'Early Browserless rendered-page fallback succeeded after parse-empty HTTP pages') };
+          }
+          technicalPath.push('browser-early-empty');
+        }
       }catch{
         technicalPath.push('http-error');
       }
