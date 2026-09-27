@@ -34,10 +34,11 @@ test('browser contribution and provider throttling have distinct deltas when bot
   assert.equal(metrics.find(m=>m.metric==='browserProviderLimitedSources').delta,-1);
 });
 
-test('a retry keeps the original same-day baseline; tomorrow uses today as baseline', () => {
+test('a new same-day batch snapshot compares with the latest report; retries keep that baseline', () => {
   const original={startedAt:'2026-09-26',finishedAt:'2026-09-26',coverage:[]};
-  const today={startedAt:'2026-09-27',finishedAt:'2026-09-27',coverage:[],comparison:{baseline:original}};
+  const today={startedAt:'2026-09-27',finishedAt:'2026-09-27',batchSnapshotAt:'2026-09-27T12:00:00Z',coverage:[],comparison:{baseline:original}};
   const previous={run_key:'2026-09-27',report:today};
-  assert.equal(comparisonBaseline(previous,'2026-09-27'),original);
-  assert.equal(comparisonBaseline(previous,'2026-09-28'),today);
+  assert.equal(comparisonBaseline(previous,'2026-09-27','2026-09-27T12:00:00Z'),original);
+  assert.equal(comparisonBaseline(previous,'2026-09-27','2026-09-27T14:20:00Z'),today);
+  assert.equal(comparisonBaseline(previous,'2026-09-28','2026-09-28T12:00:00Z'),today);
 });

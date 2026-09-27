@@ -143,9 +143,10 @@ export async function finalizeBatches(runDate = utcDateKey()) {
   const count=(status:string)=>coverage.filter(x=>x.status===status).length;
   const startedAt=new Date(Math.min(...rows.map((r:any)=>new Date(r.started_at).getTime()))).toISOString();
   const finishedAt=new Date().toISOString();
+  const snapshotAt=new Date(Math.max(...rows.map((r:any)=>new Date(r.finished_at).getTime()))).toISOString();
 
   const report:RunReport={
-    startedAt,finishedAt,plannedSources:SHOPS.length,attemptedSources:coverage.length,
+    startedAt,finishedAt,batchSnapshotAt:snapshotAt,plannedSources:SHOPS.length,attemptedSources:coverage.length,
     success:count('success'),partial:count('partial'),browser:count('browser'),
     blocked:count('blocked'),failed:count('failed'),
     rawOffers:coverage.reduce((sum,x)=>sum+Number(x.parsedOffers||0),0),
@@ -155,14 +156,11 @@ export async function finalizeBatches(runDate = utcDateKey()) {
   };
   const previous=await latestRun();
   if(previous?.report?.coverage?.length){
-    // Keep the original baseline only for repeated finalizations of this date.
-    // Tomorrow must compare with today's report, not with today's baseline.
-    const baseline=comparisonBaseline(previous,runDate);
+    const baseline=comparisonBaseline(previous,runDate,snapshotAt);
     report.comparison=compareCoverage(report,baseline);
   }
   await saveRun(report,deals,near);
   let notification='not-configured';
-  const snapshotAt=new Date(Math.max(...rows.map((r:any)=>new Date(r.finished_at).getTime()))).toISOString();
   try{notification=await sendRunNotification(runDate,deals,near,report,snapshotAt)}
   catch(error){console.error('[finalize] notification failed',error);notification='failed'}
   console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length}`);

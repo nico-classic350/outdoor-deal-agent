@@ -54,6 +54,7 @@ export async function replayLatestCompleteSnapshot() {
   const report: RunReport = {
     startedAt: snapshotStartedAt,
     finishedAt: snapshotFinishedAt,
+    batchSnapshotAt: snapshotFinishedAt,
     plannedSources: SHOPS.length,
     attemptedSources: coverage.length,
     success: count('success'),
@@ -72,7 +73,7 @@ export async function replayLatestCompleteSnapshot() {
   };
   const previous = await latestRun();
   if (previous?.report?.coverage?.length) {
-    report.comparison = compareCoverage(report,comparisonBaseline(previous,runDate));
+    report.comparison = compareCoverage(report,comparisonBaseline(previous,runDate,snapshotFinishedAt));
   }
 
   return {
