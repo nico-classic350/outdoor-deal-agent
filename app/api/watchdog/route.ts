@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const runDate = new Date().toISOString().slice(0, 10);
   const sql = neon(process.env.DATABASE_URL);
   try {
-    const rows = await sql`SELECT batch_index,source_count FROM agent_batch_runs WHERE run_date=${runDate}`;
+    const rows = await sql`SELECT batch_index,source_count,finished_at FROM agent_batch_runs WHERE run_date=${runDate}`;
     const completed = new Set(rows.filter(row => {
       const i = Number(row.batch_index);
       return i >= 0 && i < BATCH_COUNT && Number(row.source_count) === SHOPS.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE).length;
@@ -32,9 +32,11 @@ export async function GET(request: NextRequest) {
       action = 'retry-batch';
       detail = await retryMissingBatch(missing[0]);
     } else {
-      const finalized = await sql`SELECT 1 FROM agent_runs WHERE run_key=${runDate} LIMIT 1`;
-      if (!finalized.length) {
-        action = 'finalize';
+      const finalized = await sql`SELECT report->>'batchSnapshotAt' AS snapshot_at FROM agent_runs WHERE run_key=${runDate} LIMIT 1`;
+      const latestBatchAt = Math.max(...rows.map(row => new Date(row.finished_at).getTime()));
+      const publishedAt = finalized.length ? new Date(String(finalized[0].snapshot_at || '')).getTime() : NaN;
+      if (!finalized.length || !Number.isFinite(publishedAt) || latestBatchAt > publishedAt) {
+        action = finalized.length ? 'refinalize' : 'finalize';
         const result = await finalizeBatches(runDate);
         detail = { complete: result.complete, notification: result.complete ? result.notification : null };
       }
