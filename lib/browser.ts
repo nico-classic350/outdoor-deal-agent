@@ -405,7 +405,7 @@ export async function browserExtract(
       // Keep production logs compact and reviewable; never log raw HTML or evidence text.
       console.info(JSON.stringify({
         event: 'llm-extraction-pilot', sourceId: source.id, mode: extraction.mode,
-        outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || 'gpt-5.6-luna',
+        outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || 'gpt-6-luna',
         candidates: extraction.candidateCount, offers: extraction.observedOffers.map(offer => ({
           name: offer.name, brand: offer.brand, price: offer.price, currency: offer.currency, url: offer.url,
         })), elapsedMs: extraction.elapsedMs,

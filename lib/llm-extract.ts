@@ -5,7 +5,7 @@ import { RawOffer, ShopSource } from './types';
 const MAX_INPUT_CHARS = 16000;
 const MAX_CANDIDATES = 12;
 const MAX_OUTPUT_TOKENS = 1800;
-const DEFAULT_MODEL = 'gpt-5.6-luna';
+const DEFAULT_MODEL = 'gpt-6-luna';
 
 const outputSchema = z.object({
   offers: z.array(z.object({

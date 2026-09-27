@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, matchesGlob } from 'node:path';
 
 const root=process.cwd(); const errors=[]; const ok=[];
 const full=(p)=>join(root,p);
@@ -53,8 +53,16 @@ assert(agentState.includes('Starting a fresh ChatGPT chat'),'durable project han
 assert(/pull_request:/.test(ciWorkflow)&&/branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates pull requests to main');
 assert(/push:[\s\S]*branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates main');
 const deploymentEnabled=vercel.git?.deploymentEnabled||{};
-assert(deploymentEnabled['*']===false,'Vercel disables all non-main Git deployments by default');
+assert(
+  Object.keys(deploymentEnabled).sort().join(',')==='**,main' && deploymentEnabled['**']===false,
+  'Vercel disables every non-main Git branch, including branches containing slashes',
+);
 assert(deploymentEnabled.main===true,'Vercel allows automatic production deployment from main');
+assert(
+  ['feature/llm-extraction-pilot','feature/gpt6-luna-default','feat/deal-quality-ui-mammut','stabilize-agent','nested/topic/fix'].every(branch => matchesGlob(branch, '**'))
+    && !['feature/llm-extraction-pilot','nested/topic/fix'].some(branch => matchesGlob(branch, '*')),
+  'deployment glob covers nested feature branches that * alone misses',
+);
 
 const dataMatch=shopsSource.match(/const DATA\s*=\s*`([\s\S]*?)`;/);
 const shopLines=dataMatch?dataMatch[1].trim().split('\n').filter(Boolean):[];

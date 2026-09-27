@@ -10,7 +10,8 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - Hosting/runtime: Vercel + Node 24 + Next.js/TypeScript
 - Database: Neon PostgreSQL
 - CI: GitHub Actions `CI & Change Observability`
-- Non-main Vercel previews are disabled; only `main` deploys automatically.
+- `git.deploymentEnabled` uses `**: false` for non-main branches (including branches with `/`) and `main: true` for production. The old `*: false` rule did not cover slashed branches. Vercel may retain historical failed-preview records; future feature pushes should create no preview deployment.
+- The connected GitHub app is the write path in short-lived Codex workspaces. Shell Git fetch works without credentials, but shell Git push may fail; do not try to persist a personal access token in the project or workspace. Create/update branches and PRs through the GitHub app, then fetch the remote branch locally. A personal terminal may use its own credential helper.
 
 ## Daily pipeline
 
@@ -65,7 +66,7 @@ Optional bounded LLM extraction pilot (off unless enabled):
 - `OPENAI_API_KEY` (server-side only)
 - `LLM_EXTRACTION_MODE=shadow` to observe results without publishing them; `active` is opt-in after review
 - `LLM_EXTRACTION_SHOPS` (comma-separated; defaults to `mammut-eu`)
-- `LLM_EXTRACTION_MODEL` (defaults to `gpt-5.6-luna`)
+- `LLM_EXTRACTION_MODEL` (defaults to `gpt-6-luna`)
 
 The pilot only runs after a rendered page was received and deterministic extraction returned no offers. It caps the request at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. It requires page evidence for extracted names and prices; listing pages never confirm size or availability. See the README's “LLM extraction pilot” section for its shadow-review and activation procedure.
 
