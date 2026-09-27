@@ -1,6 +1,6 @@
 import { RawOffer, ShopSource } from './types';
 import { extractHtmlFallback, extractJsonLd } from './extract';
-import { llmExtractFromHtml } from './llm-extract';
+import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
 
 export type BrowserFallbackResult = {
@@ -405,7 +405,7 @@ export async function browserExtract(
       // Keep production logs compact and reviewable; never log raw HTML or evidence text.
       console.info(JSON.stringify({
         event: 'llm-extraction-pilot', sourceId: source.id, mode: extraction.mode,
-        outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || 'gpt-6-luna',
+        outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || DEFAULT_LLM_EXTRACTION_MODEL,
         candidates: extraction.candidateCount, offers: extraction.observedOffers.map(offer => ({
           name: offer.name, brand: offer.brand, price: offer.price, currency: offer.currency, url: offer.url,
         })), elapsedMs: extraction.elapsedMs,
