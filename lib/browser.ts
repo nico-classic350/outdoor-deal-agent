@@ -1,5 +1,6 @@
 import { RawOffer, ShopSource } from './types';
 import { extractHtmlFallback, extractJsonLd } from './extract';
+import { llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
 
 export type BrowserFallbackResult = {
@@ -8,6 +9,8 @@ export type BrowserFallbackResult = {
   httpStatus?: number;
   elapsedMs?: number;
   steps?: string[];
+  /** Internal-only snapshot used for one bounded LLM extraction attempt; stripped before returning. */
+  renderedHtml?: string;
 };
 
 type UnblockSessionResult = {
@@ -101,7 +104,7 @@ async function contentRequest(source: ShopSource, url: string, deadline: number)
     }
     const html = await response.text();
     return {
-      offers: parseRenderedHtml(source, url, html), mode: 'content', httpStatus: response.status,
+      offers: parseRenderedHtml(source, url, html), mode: 'content', httpStatus: response.status, renderedHtml: html,
       elapsedMs: Date.now() - started, steps: ['content-rendered'],
     };
   } catch (error) {
@@ -137,7 +140,7 @@ async function unblockContentRequest(source: ShopSource, url: string, deadline: 
     const payload = await response.json() as { content?: string | null };
     const html = payload?.content || '';
     return {
-      offers: html ? parseRenderedHtml(source, url, html) : [], mode: 'unblock', httpStatus: response.status,
+      offers: html ? parseRenderedHtml(source, url, html) : [], mode: 'unblock', httpStatus: response.status, renderedHtml: html || undefined,
       elapsedMs: Date.now() - started, steps: ['unblock-content'],
     };
   } catch (error) {
@@ -321,6 +324,7 @@ async function playwrightFromEndpoint(
       offers,
       mode: 'playwright',
       httpStatus: 200,
+      renderedHtml: html,
       elapsedMs: Date.now() - started,
       steps: [...options.steps, offers.length ? 'playwright-extracted' : 'playwright-empty'],
     };
@@ -372,17 +376,41 @@ export async function browserExtract(
   const deadline = Math.min(options.deadline ?? started + 45000, started + 45000);
   const blocked = Boolean(options.blocked);
   const attempts: BrowserFallbackResult[] = [];
+  let llmSteps: string[] = [];
   const canTry = () => timeLeft(deadline, 30000) >= 1000;
   const record = (result: BrowserFallbackResult) => { attempts.push(result); return result.offers.length > 0; };
-  const done = (result: BrowserFallbackResult): BrowserFallbackResult => ({
-    ...result,
-    elapsedMs: Date.now() - started,
-    steps: attempts.flatMap(attempt => [
-      ...(attempt.steps || []),
-      `${attempt.mode}-elapsed-${Math.round((attempt.elapsedMs || 0) / 1000)}s`,
-    ]).concat(attempts.includes(result) ? [] : result.steps || [], canTry() ? [] : ['browser-budget-exhausted']),
-    httpStatus: result.httpStatus ?? [...attempts].reverse().find(attempt => attempt.httpStatus)?.httpStatus,
-  });
+  const done = (result: BrowserFallbackResult): BrowserFallbackResult => {
+    const { renderedHtml: _renderedHtml, ...publicResult } = result;
+    return {
+      ...publicResult,
+      elapsedMs: Date.now() - started,
+      steps: attempts.flatMap(attempt => [
+        ...(attempt.steps || []),
+        `${attempt.mode}-elapsed-${Math.round((attempt.elapsedMs || 0) / 1000)}s`,
+      ]).concat(attempts.includes(result) ? [] : result.steps || [], llmSteps, canTry() ? [] : ['browser-budget-exhausted']),
+      httpStatus: result.httpStatus ?? [...attempts].reverse().find(attempt => attempt.httpStatus)?.httpStatus,
+    };
+  };
+
+  const tryLlmFallback = async (): Promise<RawOffer[]> => {
+    const snapshot = [...attempts].reverse().find(attempt => attempt.renderedHtml)?.renderedHtml;
+    if (!snapshot || !canTry()) return [];
+    const extraction = await llmExtractFromHtml(source, url, snapshot, { timeoutMs: Math.max(1000, Math.min(6000, timeLeft(deadline, 7000))) });
+    if (extraction.attempted) {
+      llmSteps.push(`llm-pilot-${extraction.mode}-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
+      // Keep production logs compact and reviewable; never log raw HTML or evidence text.
+      console.info(JSON.stringify({
+        event: 'llm-extraction-pilot', sourceId: source.id, mode: extraction.mode,
+        outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || 'gpt-6-luna',
+        candidates: extraction.candidateCount, offers: extraction.observedOffers.map(offer => ({
+          name: offer.name, brand: offer.brand, price: offer.price, currency: offer.currency, url: offer.url,
+        })), elapsedMs: extraction.elapsedMs,
+      }));
+    } else if (extraction.mode !== 'off' && extraction.outcome !== 'shop-not-allowed') {
+      llmSteps.push(`llm-pilot-${extraction.outcome}-candidates-${extraction.candidateCount}`);
+    }
+    return extraction.offers;
+  };
 
   if (blocked) {
     const unblock = await unblockContentRequest(source, url, deadline);
@@ -402,6 +430,8 @@ export async function browserExtract(
       const content = await contentRequest(source, url, deadline);
       if (record(content)) return done(content);
     }
+    const llmOffers = await tryLlmFallback();
+    if (llmOffers.length) return done({ offers: llmOffers, mode: 'unblock', steps: ['llm-pilot-active-offers'] });
     return done({
       offers: [], mode: 'unblock', httpStatus: unblock.httpStatus,
       steps: ['blocked-exhausted'],
@@ -413,9 +443,13 @@ export async function browserExtract(
 
   if (canTry() && browserPlaywrightConfigured()) {
     const playwright = await freshPlaywrightRequest(source, url, false, deadline);
-    record(playwright);
+    if (record(playwright)) return done(playwright);
+    const llmOffers = await tryLlmFallback();
+    if (llmOffers.length) return done({ offers: llmOffers, mode: 'playwright', steps: ['llm-pilot-active-offers'] });
     return done(playwright);
   }
 
+  const llmOffers = await tryLlmFallback();
+  if (llmOffers.length) return done({ offers: llmOffers, mode: content.mode, httpStatus: content.httpStatus, steps: ['llm-pilot-active-offers'] });
   return done(content);
 }

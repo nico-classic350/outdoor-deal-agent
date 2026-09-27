@@ -52,6 +52,15 @@ Never commit values. Supported names:
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
 
+Optional bounded LLM extraction pilot (off unless enabled):
+
+- `OPENAI_API_KEY` (server-side only)
+- `LLM_EXTRACTION_MODE=shadow` to observe results without publishing them; `active` is opt-in after review
+- `LLM_EXTRACTION_SHOPS` (comma-separated; defaults to `mammut-eu`)
+- `LLM_EXTRACTION_MODEL` (defaults to `gpt-6-luna`)
+
+The pilot only runs after a rendered page was received and deterministic extraction returned no offers. It caps the request at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. It requires page evidence for extracted names and prices; listing pages never confirm size or availability. See the README's “LLM extraction pilot” section for its shadow-review and activation procedure.
+
 For a read-only five-shop Browserless smoke test, set the token in the local shell and run `pnpm smoke:browser`. The default shops are Hervis, Sport Bittl, Mammut EU, Odlo EU and Arc’teryx EU; pass shop IDs to select others. It prints coverage and offer counts and never writes to Neon. Browserless requests may consume account credits. HTTP and browser requests share the source deadline; coverage records each browser stage and its elapsed time.
 
 Health exposes only non-secret configuration state.
