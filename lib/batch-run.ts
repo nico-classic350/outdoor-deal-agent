@@ -6,6 +6,8 @@ import { crawlSource } from './crawl';
 import { normalizeOffer } from './normalize';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
 import { saveRun } from './store';
+import { sendRunNotification } from './notify';
+import { diagnoseCoverage } from './diagnose';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
 
 export const BATCH_SIZE = 6;
@@ -53,8 +55,23 @@ export async function runBatch(batchIndex: number) {
 
   const results = await Promise.all(sources.map((source) => limit(() => crawlSource(source))));
   const raw = results.flatMap((r) => r.offers);
-  const normalized = (await Promise.all(raw.map(normalizeOffer))).filter(Boolean) as NormalizedOffer[];
+  const attempted = await Promise.allSettled(raw.map(normalizeOffer));
+  const normalized = attempted.filter((r):r is PromiseFulfilledResult<NormalizedOffer|null>=>r.status==='fulfilled')
+    .map(r=>r.value).filter(Boolean) as NormalizedOffer[];
+  const rejected = attempted.filter(r=>r.status==='rejected').length;
+  if(rejected) console.warn(`[batch] rejected-offers date=${runDate} batch=${batchIndex} count=${rejected}`);
   const coverage = results.map((r) => r.coverage);
+  for(const c of coverage){
+    const items=normalized.filter(o=>o.sourceId===c.sourceId);
+    const sourceRaw=raw.filter(o=>o.sourceId===c.sourceId);
+    c.eligibleOffers=sourceRaw.filter(o=>Boolean(o.name&&productEligible(o.name,o.description))).length;
+    c.pricedOffers=items.length;
+    c.verifiedReferenceOffers=items.filter(o=>o.rrpVerified).length;
+    c.availableSizeOffers=items.filter(o=>o.sizeFit==='confirmed').length;
+    c.qualifiedOffers=selectOffers(items,PROFILE.minEffectiveDiscountPct).qualifiedCount;
+    if((c.status==='success'||c.status==='browser') && !items.length) c.status='partial';
+    c.diagnosticCode=diagnoseCoverage(c);
+  }
   const finishedAt = new Date().toISOString();
 
   const sql = await db();
@@ -74,13 +91,23 @@ export async function runBatch(batchIndex: number) {
     rawOffers:raw.length, normalizedOffers:normalized.length, coverage, startedAt, finishedAt };
 }
 
+export async function retryMissingBatch(batchIndex:number){
+  if (!Number.isInteger(batchIndex) || batchIndex<0 || batchIndex>=BATCH_COUNT) throw new Error('invalid batch index');
+  const sql=await db(), runDate=utcDateKey();
+  const rows=await sql`SELECT source_count FROM agent_batch_runs WHERE run_date=${runDate} AND batch_index=${batchIndex}`;
+  const expected=SHOPS.slice(batchIndex*BATCH_SIZE,(batchIndex+1)*BATCH_SIZE).length;
+  if(Number(rows[0]?.source_count)===expected) return {runDate,batchIndex,skipped:true};
+  return runBatch(batchIndex);
+}
+
 export async function finalizeBatches(runDate = utcDateKey()) {
   const sql = await db();
   const rows = await sql`
     SELECT batch_index, started_at, finished_at, source_count, coverage, offers
     FROM agent_batch_runs WHERE run_date = ${runDate} ORDER BY batch_index ASC
   `;
-  const completed = new Set(rows.map((r:any)=>Number(r.batch_index)));
+  const completed = new Set(rows.filter((r:any)=>Number(r.source_count)===SHOPS.slice(Number(r.batch_index)*BATCH_SIZE,(Number(r.batch_index)+1)*BATCH_SIZE).length)
+    .map((r:any)=>Number(r.batch_index)));
   const missingBatches = Array.from({length:BATCH_COUNT},(_,i)=>i).filter(i=>!completed.has(i));
 
   if(missingBatches.length){
@@ -109,7 +136,10 @@ export async function finalizeBatches(runDate = utcDateKey()) {
     qualifiedDeals:deals.length,nearMisses:near.length,coverage
   };
   await saveRun(report,deals,near);
+  let notification='not-configured';
+  try{notification=await sendRunNotification(runDate,deals,near,report)}
+  catch(error){console.error('[finalize] notification failed',error);notification='failed'}
   console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length}`);
   return { runDate, complete:true, completedBatches:rows.length, expectedBatches:BATCH_COUNT,
-    missingBatches:[], deals, nearMisses:near, report };
+    missingBatches:[], deals, nearMisses:near, report, notification };
 }

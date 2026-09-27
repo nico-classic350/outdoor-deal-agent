@@ -25,6 +25,22 @@
     { "path": "/api/batch/14", "schedule": "0 3 * * *" },
     { "path": "/api/batch/15", "schedule": "0 3 * * *" },
     { "path": "/api/finalize", "schedule": "0 4 * * *" },
-    { "path": "/api/finalize-retry", "schedule": "0 5 * * *" }
+    { "path": "/api/retry-batch/0", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/1", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/2", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/3", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/4", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/5", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/6", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/7", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/8", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/9", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/10", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/11", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/12", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/13", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/14", "schedule": "0 5 * * *" },
+    { "path": "/api/retry-batch/15", "schedule": "0 5 * * *" },
+    { "path": "/api/finalize-retry", "schedule": "0 7 * * *" }
   ]
 }

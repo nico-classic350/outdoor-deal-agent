@@ -47,10 +47,10 @@ function canonical(raw:string){
   try{const u=new URL(norm(raw));u.hash='';return u.toString()}catch{return norm(raw)}
 }
 
-export async function ingestGlobetrotterOfficialFeed(source:ShopSource):Promise<RawOffer[]>{
+export async function ingestGlobetrotterOfficialFeed(source:ShopSource, deadline=Date.now()+120000):Promise<RawOffer[]>{
   const r=await fetch(FEED_URL,{
     headers:{'user-agent':'OutdoorDealAgent/1.0'},
-    signal:AbortSignal.timeout(120000)
+    signal:AbortSignal.timeout(Math.max(1,Math.min(120000,deadline-Date.now())))
   });
   if(!r.ok||!r.body) throw new Error(`Globetrotter feed HTTP ${r.status}`);
 

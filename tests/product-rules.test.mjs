@@ -43,19 +43,41 @@ test('deal tier depends on discount and product fit, not whether size data is re
 test('same product URL is one candidate despite card titles and tracking parameters', () => {
   const url = 'https://www.bergfreunde.de/hagloefs-korp-lite-hose/';
   const base = { sourceId: 'bergfreunde', brand: 'Haglöfs', name: 'Herren Korp Lite Hose', url,
-    sizeFit: 'unconfirmed', class: 'Near Miss', effectiveDiscountPct: 55, effectiveCostEur: 59.98,
+    sizeFit: 'confirmed', shippingKnown: true, rrpVerified: true, class: 'Top Deal', effectiveDiscountPct: 55, effectiveCostEur: 59.98,
     productFitScore: 80, score: 57 };
   const { deals, near } = selectOffers([base, { ...base, name: 'Herren Korp Lite Hose Sale', url: url + '?utm_source=test' }]);
   assert.equal(deals.length, 1);
   assert.equal(near.length, 0);
 });
 
-test('a strong deal can qualify with unknown size, but explicit incompatible size cannot', () => {
+test('an unknown size remains a review candidate, explicit incompatible sizes are excluded', () => {
   const base = { sourceId: 'bergzeit', brand: 'Haglöfs', name: 'Herren Korp Lite Hose',
     url: 'https://www.bergzeit.de/p/korp/1/', sizeFit: 'unconfirmed', class: 'Near Miss',
     effectiveDiscountPct: 54, effectiveCostEur: 54, productFitScore: 65, score: 58 };
-  assert.equal(selectOffers([base]).deals.length, 1);
+  assert.equal(selectOffers([{...base,shippingKnown:true,rrpVerified:true}]).deals.length, 0);
+  assert.match(selectOffers([{...base,shippingKnown:true,rrpVerified:true}]).near[0].reason,/Größe/);
 
   const explicitNo = { ...base, sizeFit: 'no', score: 30 };
   assert.equal(selectOffers([explicitNo]).deals.length, 0);
+});
+
+test('sixth qualifying deal is not relabeled as a near miss', () => {
+  const offers=Array.from({length:6},(_,i)=>({sourceId:'x',brand:'Mammut',name:'Herren Wanderhose',
+    url:`https://example.org/p/${i}`,sizeFit:'confirmed',shippingKnown:true,rrpVerified:true,
+    effectiveDiscountPct:60,effectiveCostEur:50,productFitScore:85,score:100-i}));
+  const result=selectOffers(offers);
+  assert.equal(result.qualifiedCount,6);
+  assert.equal(result.deals.length,5);
+  assert.equal(result.near.length,0);
+});
+
+test('a cheaper unverified variant does not hide a verified variant at the same URL', () => {
+  const base={sourceId:'x',brand:'Mammut',name:'Herren Wanderhose',url:'https://example.org/p/1',
+    sizeFit:'confirmed',effectiveDiscountPct:60,productFitScore:85,score:80};
+  const {deals}=selectOffers([
+    {...base,rrpVerified:false,shippingKnown:false,effectiveCostEur:40},
+    {...base,rrpVerified:true,shippingKnown:true,effectiveCostEur:60}
+  ]);
+  assert.equal(deals.length,1);
+  assert.equal(deals[0].effectiveCostEur,60);
 });

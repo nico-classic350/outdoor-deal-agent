@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { PROFILE } from '../config/profile';
 import { RawOffer, ShopSource } from './types';
+import { extractHtmlFallback } from './extract';
 
 const BRAND_SLUG: Record<string,string> = {
   "Arc'teryx":"arcteryx","Odlo":"odlo","Dynafit":"dynafit","Ortovox":"ortovox",
@@ -11,6 +12,7 @@ const BRAND_SLUG: Record<string,string> = {
 };
 
 export function targetedListingUrls(source: ShopSource): string[] {
+  if(source.id==='mammut-eu') return ['https://www.mammut.com/de/de/category/5834-10/wanderhosen'];
   const urls:string[]=[];
   for (const brand of PROFILE.brands) {
     const slug=BRAND_SLUG[brand] || brand.toLowerCase().replace(/[^a-z0-9]+/g,'-');
@@ -140,6 +142,9 @@ function extractBergzeitState(html:string, source:ShopSource):RawOffer[]{
 }
 
 export function extractTargetedListing(html:string, source:ShopSource, pageUrl:string):RawOffer[] {
+  if(source.id==='mammut-eu') return extractHtmlFallback(html,source,pageUrl)
+    .filter(x=>/\/products\//.test(x.url) && /\b(?:pants?|hosen?)\b/i.test(x.name||''))
+    .map(x=>({...x,brand:'Mammut'}));
   if(source.id==='bergzeit') return extractBergzeitState(html,source);
   const $=cheerio.load(html);
   const out:RawOffer[]=[];
@@ -162,7 +167,8 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     const prices=moneyValues(blob);
     if(!prices.length) return;
     const price=Math.min(...prices);
-    const rrp=Math.max(...prices);
+    // Listing text often repeats the price and includes neighboring variants.
+    // A highest number from the card is not a verified reference price.
 
     let name=clean(a.text());
     if(name.length<5 || name.length>220) {
@@ -183,7 +189,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     out.push({
       sourceId:source.id, merchant:source.name, merchantCountry:source.country,
       url:href, imageUrl:imageUrl?abs(pageUrl,imageUrl):undefined,
-      brand, name, sizes, currency:'EUR', price, rrp:rrp>=price?rrp:price,
+      brand, name, sizes, currency:'EUR', price,
       availability:/ausverkauft|nicht verfügbar|sold out/i.test(blob)?'out_of_stock':'unknown',
       description:blob.slice(0,500)
     });

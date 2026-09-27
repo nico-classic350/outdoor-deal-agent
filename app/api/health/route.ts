@@ -12,7 +12,7 @@ export async function GET() {
   const now = new Date();
   const runDate = now.toISOString().slice(0, 10);
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const pipelineExpectedComplete = utcMinutes >= 7 * 60 + 30;
+  const pipelineExpectedComplete = utcMinutes >= 9 * 60 + 30;
   const browser = browserFallbackConfig();
 
   const base = {
@@ -51,6 +51,7 @@ export async function GET() {
     let batchRowsToday = 0;
     let latestFinalizedAt: string | null = null;
     let latestFinalizedRunDate: string | null = null;
+    let sourceQuality: {usableSources:number;verifiedReferenceSources:number;confirmedSizeSources:number;qualifiedDeals:number}|null=null;
 
     if (batchTablePresent) {
       const rows = await sql`
@@ -63,7 +64,7 @@ export async function GET() {
 
     if (runTablePresent) {
       const rows = await sql`
-        SELECT started_at, finished_at
+        SELECT started_at, finished_at, report
         FROM agent_runs
         ORDER BY finished_at DESC NULLS LAST, id DESC
         LIMIT 1
@@ -71,6 +72,13 @@ export async function GET() {
       const row = rows[0];
       if (row?.finished_at) latestFinalizedAt = new Date(row.finished_at).toISOString();
       if (row?.started_at) latestFinalizedRunDate = new Date(row.started_at).toISOString().slice(0, 10);
+      const sources=Array.isArray(row?.report?.coverage)?row.report.coverage:[];
+      if(sources.length) sourceQuality={
+        usableSources:sources.filter((s:{pricedOffers?:number})=>Number(s.pricedOffers)>0).length,
+        verifiedReferenceSources:sources.filter((s:{verifiedReferenceOffers?:number})=>Number(s.verifiedReferenceOffers)>0).length,
+        confirmedSizeSources:sources.filter((s:{availableSizeOffers?:number})=>Number(s.availableSizeOffers)>0).length,
+        qualifiedDeals:Number(row.report.qualifiedDeals||0)
+      };
     }
 
     const batchesComplete = batchRowsToday === BATCH_COUNT;
@@ -91,6 +99,7 @@ export async function GET() {
         finalizedToday,
         latestFinalizedAt,
         latestFinalizedRunDate,
+        sourceQuality,
         pipelineStatus,
         ...base,
       },

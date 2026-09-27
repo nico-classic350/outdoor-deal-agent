@@ -275,18 +275,22 @@ async function extractRenderedDomOffers(
 }
 
 async function enrichSingleOfferSizes(page: import('playwright-core').Page, offers: RawOffer[]) {
-  if (offers.length !== 1) return offers;
+  if (offers.length !== 1 || !/\/products?\/|\/artikel\/|\/p\//i.test(page.url())) return offers;
   try {
     const selectors = [
       '[data-testid*="size"] button', '[data-testid*="size"] label',
       'button[name*="size"]', '[class*="size"] button', '[class*="size"] label',
       'input[name*="size"] + label', 'select[name*="size"] option',
     ].join(',');
-    const values = (await page.locator(selectors).allTextContents())
+    const values = (await page.locator(selectors).evaluateAll(elements=>elements
+      .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out') &&
+        !(el instanceof HTMLOptionElement && el.disabled) &&
+        !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
+      .map(el=>(el.textContent||'').trim())))
       .map(v => v.replace(/\s+/g, ' ').trim())
       .filter(v => /^(?:W?\d{2}(?:\s*\/\s*L?\d{2})?|(?:EU\s*)?\d{2}|XS|S|M|L|XL|XXL)$/i.test(v));
     const unique = [...new Set(values)].slice(0, 30);
-    if (unique.length) offers[0].sizes = unique;
+    if (unique.length) { offers[0].sizes = unique; offers[0].sizeAvailability='available'; }
   } catch {}
   return offers;
 }

@@ -38,6 +38,7 @@ export const AWIN_ADVERTISERS: Record<string,number> = {
 };
 
 let feedListCache: Promise<FeedMeta[]> | null = null;
+let feedListExpires=0;
 
 function n(v:any){ return String(v ?? '').trim(); }
 function money(v:any):number|undefined{
@@ -55,9 +56,10 @@ function brandAllowed(raw:string){
 function canonical(raw:string){
   try{
     const u=new URL(n(raw));
+    if(u.protocol!=='https:' || /(?:^|\.)awin\.(?:com|net)$/i.test(u.hostname)) return '';
     u.hash='';
     return u.toString();
-  }catch{return n(raw)}
+  }catch{return ''}
 }
 function isRelevantLongMensPants(row:Record<string,string>){
   const name=n(row.product_name);
@@ -79,7 +81,7 @@ function parseSizeStockStatus(v:string):string[]{
     const m=p.match(/^([^:]+):(.+)$/);
     if(m){
       if(/available|in.?stock|true|yes|1/i.test(m[2]) && !/unavailable|out.?of.?stock|false|no|0/i.test(m[2])) out.push(m[1].trim());
-    } else out.push(p);
+    }
   }
   return out;
 }
@@ -93,12 +95,12 @@ function parseSizeStockAmount(v:string):string[]{
   return out;
 }
 function sizesOf(row:Record<string,string>){
-  const vals=[
-    n(row.size),
-    ...parseSizeStockStatus(row.size_stock_status),
-    ...parseSizeStockAmount(row.size_stock_amount)
-  ].filter(Boolean);
-  return [...new Set(vals)];
+  const available=[...parseSizeStockStatus(row.size_stock_status),...parseSizeStockAmount(row.size_stock_amount)];
+  // A plain size label on a parent row is not proof of live variant stock.
+  const variantStock=/^(1|true|yes)$/i.test(n(row.in_stock)) || /^(in.?stock|available)$/i.test(n(row.stock_status)) || Number(row.stock_quantity)>0;
+  const single=n(row.size);
+  return {sizes:[...new Set(available.length?available:(single?[single]:[]))],
+    confirmed:available.length>0 || Boolean(single && variantStock)};
 }
 function inStock(row:Record<string,string>){
   const a=n(row.in_stock).toLowerCase(), s=n(row.stock_status).toLowerCase();
@@ -189,12 +191,12 @@ async function* csvObjects(stream:Readable){
   }
 }
 
-async function loadFeedList():Promise<FeedMeta[]>{
+async function loadFeedList(deadline:number):Promise<FeedMeta[]>{
   const key=process.env.AWIN_DATAFEED_API_KEY;
   if(!key) return [];
   const r=await fetch('https://productdata.awin.com/datafeed/list/apikey/'+encodeURIComponent(key),{
     headers:{'user-agent':'OutdoorDealAgent/1.0'},
-    signal:AbortSignal.timeout(20000)
+    signal:AbortSignal.timeout(Math.max(1,Math.min(20000,deadline-Date.now())))
   });
   if(!r.ok) throw new Error('Awin feed list HTTP '+r.status);
   const text=await r.text();
@@ -214,12 +216,25 @@ async function loadFeedList():Promise<FeedMeta[]>{
     url:n(row['URL'] || row['Url'] || row['url']),
   })).filter(x=>x.advertiserId&&x.url);
 }
-async function feedList(){
-  if(!feedListCache) feedListCache=loadFeedList().catch(e=>{feedListCache=null;throw e});
+async function feedList(deadline:number){
+  if(!feedListCache||Date.now()>feedListExpires){
+    feedListCache=loadFeedList(deadline).catch(e=>{feedListCache=null;throw e});
+    feedListExpires=Date.now()+6*60*60*1000;
+  }
   return feedListCache;
 }
+export async function awinFeedSummary(){
+  const feeds=await feedList(Date.now()+20000);
+  return Object.entries(AWIN_ADVERTISERS).map(([sourceId,advertiserId])=>{
+    const feed=chooseFeed(feeds,advertiserId);
+    const importedAt=feed?.lastImported?Date.parse(feed.lastImported):NaN;
+    return {sourceId,advertiserId,accessible:Boolean(feed),feedId:feed?.feedId||null,
+      membershipStatus:feed?.membershipStatus||null,lastImported:feed?.lastImported||null,
+      freshnessKnown:Number.isFinite(importedAt),fresh:Number.isFinite(importedAt)?Date.now()-importedAt<72*60*60*1000:null};
+  });
+}
 function chooseFeed(feeds:FeedMeta[], advertiserId:number){
-  const matches=feeds.filter(f=>Number(f.advertiserId)===advertiserId);
+  const matches=feeds.filter(f=>Number(f.advertiserId)===advertiserId && /joined|active|approved/i.test(f.membershipStatus));
   return matches.sort((a,b)=>{
     const aDe=/german|de[_-]de|deutsch/i.test(a.language)?1:0;
     const bDe=/german|de[_-]de|deutsch/i.test(b.language)?1:0;
@@ -243,18 +258,19 @@ async function readableCsv(response:Response){
   return gz ? combined.pipe(createGunzip()) : combined;
 }
 
-export async function ingestAwinProductFeed(source:ShopSource):Promise<AwinIngestResult>{
+export async function ingestAwinProductFeed(source:ShopSource, deadline=Date.now()+120000):Promise<AwinIngestResult>{
   const advertiserId=AWIN_ADVERTISERS[source.id];
   if(!advertiserId) return {configured:false,offers:[],note:'No Awin advertiser mapping'};
   if(!process.env.AWIN_DATAFEED_API_KEY) return {configured:false,offers:[],note:'AWIN_DATAFEED_API_KEY not configured'};
 
-  const feeds=await feedList();
+  if(Date.now()>=deadline) throw new Error('source-budget-exhausted');
+  const feeds=await feedList(deadline);
   const feed=chooseFeed(feeds,advertiserId);
   if(!feed) return {configured:true,offers:[],note:'No accessible Awin feed for advertiser '+advertiserId};
 
   const r=await fetch(feed.url,{
     headers:{'user-agent':'OutdoorDealAgent/1.0'},
-    signal:AbortSignal.timeout(120000)
+    signal:AbortSignal.timeout(Math.max(1,Math.min(120000,deadline-Date.now())))
   });
   if(!r.ok) throw new Error('Awin product feed HTTP '+r.status);
 
@@ -268,25 +284,20 @@ export async function ingestAwinProductFeed(source:ShopSource):Promise<AwinInges
     const rrp=money(row.rrp_price);
     if(!price || !rrp || rrp<=price) continue; // Preserve existing verified-RRP deal logic.
 
-    const merchantUrl=canonical(row.merchant_deep_link || row.deep_link);
+    const merchantUrl=canonical(row.merchant_deep_link);
     if(!merchantUrl) continue;
     const condition=n(row.condition).toLowerCase();
     if(condition && !/new|neu/.test(condition)) continue;
 
-    const sizes=sizesOf(row);
+    const {sizes,confirmed}=sizesOf(row);
     const image=n(row.merchant_image_url || row.large_image || row.aw_image_url);
     const shipping=money(row.delivery_cost);
     const model=n(row.parent_product_id || row.merchant_product_id || row.model_number || row.aw_product_id) || merchantUrl;
     const name=n(row.product_name);
-    const key=(model+'|'+brand+'|'+name+'|'+n(row.colour)).toLowerCase();
-    const prev=grouped.get(key);
-    if(prev){
-      prev.sizes=[...new Set([...(prev.sizes||[]),...sizes])];
-      if(price<Number(prev.price||Infinity)) prev.price=price;
-      if(rrp>Number(prev.rrp||0)) prev.rrp=rrp;
-      if(shipping!=null && (prev.shipping==null || shipping<prev.shipping)) prev.shipping=shipping;
-      continue;
-    }
+    // Prices and stock are observations of one variant. Never synthesize a
+    // discount by taking the cheapest price and highest RRP from different rows.
+    const key=(model+'|'+brand+'|'+name+'|'+n(row.colour)+'|'+sizes.join('/')+'|'+price+'|'+rrp).toLowerCase();
+    if(grouped.has(key)) continue;
 
     grouped.set(key,{
       sourceId:source.id,
@@ -301,7 +312,9 @@ export async function ingestAwinProductFeed(source:ShopSource):Promise<AwinInges
       currency:n(row.currency)||'EUR',
       price,
       rrp,
+      rrpSource:'awin:rrp_price',
       shipping,
+      sizeAvailability:confirmed?'available':'unknown',
       availability:'in_stock',
       description:[row.product_short_description,row.description,row.specifications].map(n).filter(Boolean).join(' ').slice(0,5000)
     });

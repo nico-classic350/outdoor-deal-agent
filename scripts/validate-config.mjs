@@ -75,8 +75,11 @@ const crons=Array.isArray(vercel.crons)?vercel.crons:[];
 const batchCronIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/batch\/(\d+)$/)).filter(Boolean).map(m=>Number(m[1])).sort((a,b)=>a-b);
 const expectedIndexes=Array.from({length:expectedBatches},(_,i)=>i);
 assert(JSON.stringify(batchCronIndexes)===JSON.stringify(expectedIndexes),`Vercel schedules exactly ${expectedBatches} batch crons`);
+const retryIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/retry-batch\/(\d+)$/)).filter(Boolean).map(m=>Number(m[1])).sort((a,b)=>a-b);
+assert(JSON.stringify(retryIndexes)===JSON.stringify(expectedIndexes),`Vercel schedules exactly ${expectedBatches} recovery crons`);
 assert(crons.filter(c=>c.path==='/api/finalize').length===1,'exactly one finalizer cron exists');
 assert(crons.filter(c=>c.path==='/api/finalize-retry').length===1,'exactly one finalizer retry cron exists');
+assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 7 * * *','finalizer retry runs after batch recovery window');
 assert(!crons.some(c=>c.path==='/api/run'||c.path==='/api/admin/run'),'monolithic run routes are not scheduled');
 
 const scheduleCounts=new Map();
@@ -84,7 +87,7 @@ for(const cron of crons.filter(c=>/^\/api\/batch\//.test(String(c.path||'')))){
   const schedule=String(cron.schedule||''); scheduleCounts.set(schedule,(scheduleCounts.get(schedule)||0)+1);
 }
 assert([...scheduleCounts.values()].every(count=>count<=4),'no batch time slot schedules more than four functions');
-for(const route of ['app/api/batch/[batch]/route.ts','app/api/finalize/route.ts','app/api/finalize-retry/route.ts']){
+for(const route of ['app/api/batch/[batch]/route.ts','app/api/retry-batch/[batch]/route.ts','app/api/finalize/route.ts','app/api/finalize-retry/route.ts']){
   const source=read(route); assert(source.includes('CRON_SECRET')&&source.includes('authorization'),`${route} requires cron authorization`);
 }
 for(const route of ['app/api/run/route.ts','app/api/admin/run/route.ts']){
@@ -93,6 +96,8 @@ for(const route of ['app/api/run/route.ts','app/api/admin/run/route.ts']){
 const sourceBudget=crawl.match(/SOURCE_BUDGET_MS[\s\S]{0,180}?\|\|\s*(\d+)/)?.[1];
 assert(Boolean(sourceBudget),'source runtime budget is configured');
 if(sourceBudget) assert(Number(sourceBudget)<=60000,'default source runtime budget is at most 60 seconds');
+assert(read('lib/crawl.ts').includes('allowedByRobots'),'crawler respects shop robots rules');
+assert(read('lib/product-rules.mjs').includes('qualifiedCount'),'all qualifying deals are classified before display limit');
 
 if(errors.length){ console.error('[validate-config] FAILED'); for(const e of errors) console.error(` - ${e}`); process.exit(1); }
 console.log(`[validate-config] OK: ${ok.length} checks; shops=${shopLines.length}; batches=${expectedBatches}; source=direct`);

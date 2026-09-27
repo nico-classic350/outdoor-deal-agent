@@ -21,6 +21,7 @@ export async function ingestFeed(source:ShopSource):Promise<RawOffer[]>{
         brand:n(row.brand)||undefined,name:n(row.name||row.title)||undefined,
         color:n(row.color)||undefined,sizes:Array.isArray(row.sizes)?row.sizes.map(n):[],
         currency:n(row.currency)||'EUR',price:money(row.price),rrp:money(row.rrp||row.msrp||row.listPrice),
+        rrpSource:row.rrp?'feed:rrp':row.msrp?'feed:msrp':undefined,
         shipping:money(row.shipping),availability:n(row.availability)||'unknown',description:n(row.description)
       })).filter((x:RawOffer)=>x.url&&x.name&&x.price);
     }catch{return []}

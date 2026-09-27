@@ -17,7 +17,7 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - 91 registered shops
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
-- finalizer publishes `agent_runs` only after all batches are present
+- 16 recovery crons at 05:00 UTC rerun missing batches; retry finalizer at 07:00 UTC publishes `agent_runs` only after all batches are present
 - `/api/health` is the production health and deployment-SHA source
 - `/api/probe` replays current filtering/scoring against the latest complete stored batch snapshot without crawling shops
 
@@ -28,7 +28,9 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - explicit incompatible evidence excludes; missing optional evidence does not
 - target size W33/L32, W34/L32 acceptable; never > L32
 - no rain/hardshell, winter/ski, zip-off, heavy alpine or loud designs
+- confirmed deals require verified same-variant reference price, known shipping and purchasable W33/W34 with L32 maximum; otherwise review candidate
 - deal qualification and scoring are deterministic TypeScript rules
+- Mammut men's category is targeted; product cards are discovery data and carry no invented UVP
 
 ## Acquisition order
 
@@ -41,6 +43,12 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 7. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
 
 No local Chromium or full Playwright browser binaries are bundled.
+
+## Results and notification
+
+- `/` displays confirmed deals, review candidates, source evidence and browser-local saved items.
+- An optional consolidated email is sent once per complete run when `RESEND_API_KEY`, `DEAL_NOTIFY_FROM`, `DEAL_NOTIFY_TO` are set. No recipient address is hardcoded.
+- Price history on the page uses finalized offer snapshots from up to 30 recent runs.
 
 ## Browserless environment variables
 
