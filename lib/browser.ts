@@ -414,13 +414,15 @@ export async function browserExtract(
     const extraction = await llmExtractFromHtml(source, url, snapshot, { timeoutMs: Math.max(1000, Math.min(6000, timeLeft(deadline, 7000))) });
     if (extraction.attempted) {
       llmSteps.push(`llm-pilot-${extraction.mode}-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
+      if (extraction.httpStatus) llmSteps.push(`llm-pilot-http-${extraction.httpStatus}`);
+      if (extraction.apiErrorCode) llmSteps.push(`llm-pilot-error-${extraction.apiErrorCode}`);
       // Keep production logs compact and reviewable; never log raw HTML or evidence text.
       console.info(JSON.stringify({
         event: 'llm-extraction-pilot', sourceId: source.id, mode: extraction.mode,
         outcome: extraction.outcome, model: process.env.LLM_EXTRACTION_MODEL || DEFAULT_LLM_EXTRACTION_MODEL,
         candidates: extraction.candidateCount, offers: extraction.observedOffers.map(offer => ({
           name: offer.name, brand: offer.brand, price: offer.price, currency: offer.currency, url: offer.url,
-        })), elapsedMs: extraction.elapsedMs,
+        })), elapsedMs: extraction.elapsedMs, httpStatus: extraction.httpStatus, apiErrorCode: extraction.apiErrorCode,
       }));
     } else if (extraction.mode !== 'off' && extraction.outcome !== 'shop-not-allowed') {
       llmSteps.push(`llm-pilot-${extraction.outcome}-candidates-${extraction.candidateCount}`);

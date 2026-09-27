@@ -92,6 +92,15 @@ test('Czech shop candidates preserve explicit CZK price evidence', async () => {
   assert.equal(result.observedOffers[0].currency,'CZK');
 });
 
+test('API failure records only bounded status and error code', async () => {
+  const result=await llmExtractFromHtml(shop,pageUrl,html,{mode:'shadow',shops:['mammut-eu'],apiKey:'test-key',
+    fetcher:async()=>({ok:false,status:400,json:async()=>({error:{type:'invalid_request_error',code:'model_not_found',message:'secret data'}})})});
+  assert.equal(result.outcome,'api-error');
+  assert.equal(result.httpStatus,400);
+  assert.equal(result.apiErrorCode,'model_not_found');
+  assert.equal(JSON.stringify(result).includes('secret data'),false);
+});
+
 test('browser fallback runs the allowlisted LLM in shadow mode without publishing its offers', async () => {
   const keys = ['BROWSERLESS_API_TOKEN', 'BROWSERLESS_PLAYWRIGHT', 'LLM_EXTRACTION_MODE', 'LLM_EXTRACTION_SHOPS', 'OPENAI_API_KEY'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));

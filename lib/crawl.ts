@@ -260,9 +260,11 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
             mode:'shadow',shops:[...LLM_DIRECT_SHADOW_SHOPS],timeoutMs:Math.min(6000,deadline-Date.now()-1000),
           });
           technicalPath.push(`llm-direct-shadow-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
+          if(extraction.httpStatus) technicalPath.push(`llm-direct-http-${extraction.httpStatus}`);
+          if(extraction.apiErrorCode) technicalPath.push(`llm-direct-error-${extraction.apiErrorCode}`);
           if(extraction.attempted) console.info(JSON.stringify({event:'llm-direct-shadow',sourceId:source.id,
             outcome:extraction.outcome,candidates:extraction.candidateCount,offers:extraction.observedOffers.length,
-            elapsedMs:extraction.elapsedMs}));
+            elapsedMs:extraction.elapsedMs,httpStatus:extraction.httpStatus,apiErrorCode:extraction.apiErrorCode}));
         }
 
         parseEmptyHttp200 += 1;
