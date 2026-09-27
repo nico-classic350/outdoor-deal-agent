@@ -16,6 +16,16 @@ function num(value:any):number|undefined{
   const n=Number(normalized); return Number.isFinite(n)&&n>0?n:undefined;
 }
 function text(value:any){return String(value??'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
+function discountFrom($:any,scope:any){
+  const labels=scope.find('[data-testid*="discount" i],[data-testid*="badge" i],[class*="discount" i],[class*="rabatt" i],[class*="percent" i],[class*="badge" i],[class*="sale-badge" i],[data-e2e-test*="discount" i]')
+    .map((_:number,node:any)=>text($(node).text())).get();
+  for(const label of labels){
+    const match=label.match(/(?:−|-|–)?\s*(\d{1,2})\s*%/);
+    const value=match?Number(match[1]):0;
+    if(value>=40&&value<100) return value;
+  }
+  return undefined;
+}
 function productNodes(value:any,out:any[]=[]):any[]{
   if(!value) return out;
   if(Array.isArray(value)){ for(const x of value) productNodes(x,out); return out; }
@@ -42,10 +52,13 @@ function rrpOf(product:any,offer:any,price?:number,productReferenceAllowed=true)
 
 export function extractJsonLd(html:string, source:ShopSource, pageUrl:string):RawOffer[]{
   const $=cheerio.load(html); const result:RawOffer[]=[]; const seen=new Set<string>();
+  const pageDiscount=discountFrom($,$('body'));
+  let totalProducts=0;
   $('script[type="application/ld+json"]').each((_,el)=>{
     try{
       const parsed=JSON.parse($(el).html()||'null');
-      for(const p of productNodes(parsed)) for(const o of offersOf(p)){
+      const products=productNodes(parsed); totalProducts+=products.length;
+      for(const p of products) for(const o of offersOf(p)){
         const url=absolute(pageUrl,o?.url||p?.url||pageUrl);
         const variantKey=`${url}|${text(o?.sku||o?.size||p?.size)}|${o?.price??''}`;
         if(!url||seen.has(variantKey)) continue;
@@ -60,13 +73,18 @@ export function extractJsonLd(html:string, source:ShopSource, pageUrl:string):Ra
         const color=text(p?.color)||undefined;
         const size=text(o?.size||p?.size)||undefined;
         seen.add(variantKey);
+        const discount=reference?undefined:pageDiscount;
+        const inStock=/InStock|LimitedAvailability/i.test(availability);
         result.push({sourceId:source.id,merchant:source.name,merchantCountry:source.country,url,
           imageUrl:absolute(pageUrl,text(imageRaw))||undefined,brand:brand||undefined,name,color,
           sizes:size?[size]:[],currency:text(o?.priceCurrency)||'EUR',price,rrp:reference?.value,rrpSource:reference?.source,
-          availability,description:text(p?.description)});
+          observedDiscountPct:discount,discountSource:discount?'merchant:displayed-discount':undefined,
+          sizeAvailability:size&&inStock?'available':'unknown',availability,description:text(p?.description)});
       }
     }catch{}
   });
+  // A page-level promo badge is only safe when the document represents one product.
+  if(totalProducts>1) for(const offer of result){offer.observedDiscountPct=undefined;offer.discountSource=undefined;}
   return result;
 }
 
@@ -96,6 +114,7 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
 
     const price=values[0];
     const reference=num(card.find('del,s,[data-testid*="original-price"],[class*="oldPrice"],[class*="originalPrice"]').first().text());
+    const displayedDiscount=discountFrom($,card);
     const rrp=reference && reference>price?reference:undefined;
     let name=text(card.find('[data-e2e-test="product-card-info-name-section"],[itemprop="name"],[data-testid*="name"],[data-testid*="title"],h2,h3,h4,[class*="title"],[class*="name"]').first().text())||text(a.text());
     if(!name) return;
@@ -106,6 +125,8 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
     seen.add(url);
     out.push({sourceId:source.id,merchant:source.name,merchantCountry:source.country,url,
       imageUrl:absolute(pageUrl,image)||undefined,brand,name,currency:'EUR',price,rrp,rrpSource:rrp?'html:marked-reference-price':undefined,
+      observedDiscountPct:!rrp&&displayedDiscount?displayedDiscount:undefined,
+      discountSource:!rrp&&displayedDiscount?'merchant:displayed-discount':undefined,
       availability:/ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(blob)?'out_of_stock':'unknown',
       description:blob.slice(0,800),sizes:[]});
   });

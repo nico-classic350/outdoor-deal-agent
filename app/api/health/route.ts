@@ -4,6 +4,8 @@ import { BATCH_COUNT } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
 import { browserFallbackConfig } from '../../../lib/browser-config.mjs';
 import { DEFAULT_LLM_EXTRACTION_MODEL } from '../../../lib/llm-extract';
+import { screenForPublication } from '../../../lib/publication-safety.mjs';
+import { PROFILE } from '../../../config/profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,7 +77,7 @@ export async function GET() {
 
     if (runTablePresent) {
       const rows = await sql`
-        SELECT started_at, finished_at, report
+        SELECT started_at, finished_at, report, deals, near_misses
         FROM agent_runs
         ORDER BY finished_at DESC NULLS LAST, id DESC
         LIMIT 1
@@ -84,11 +86,14 @@ export async function GET() {
       if (row?.finished_at) latestFinalizedAt = new Date(row.finished_at).toISOString();
       if (row?.started_at) latestFinalizedRunDate = new Date(row.started_at).toISOString().slice(0, 10);
       const sources=Array.isArray(row?.report?.coverage)?row.report.coverage:[];
+      const candidates=[...(Array.isArray(row?.deals)?row.deals:[]),...(Array.isArray(row?.near_misses)?row.near_misses:[])];
+      const safe=screenForPublication(candidates,PROFILE.minEffectiveDiscountPct);
       if(sources.length) sourceQuality={
         usableSources:sources.filter((s:{pricedOffers?:number})=>Number(s.pricedOffers)>0).length,
         verifiedReferenceSources:sources.filter((s:{verifiedReferenceOffers?:number})=>Number(s.verifiedReferenceOffers)>0).length,
         confirmedSizeSources:sources.filter((s:{availableSizeOffers?:number})=>Number(s.availableSizeOffers)>0).length,
-        qualifiedDeals:Number(row.report.qualifiedDeals||0)
+        // Match /api/coverage: report counters may have been written under old gates.
+        qualifiedDeals:safe.deals.length
       };
     }
 
