@@ -1,7 +1,7 @@
 import type { RunReport, SourceCoverage } from './types';
 
 export type CoverageSnapshot = Pick<RunReport,
-  'startedAt'|'finishedAt'|'attemptedSources'|'success'|'partial'|'browser'|'blocked'|'failed'|
+  'startedAt'|'finishedAt'|'batchSnapshotAt'|'attemptedSources'|'success'|'partial'|'browser'|'blocked'|'failed'|
   'rawOffers'|'normalizedOffers'|'confirmedSizeOffers'|'qualifiedDeals'|'nearMisses'> & {
   coverage: (Pick<SourceCoverage,'sourceId'|'name'|'status'|'parsedOffers'|'pricedOffers'|'qualifiedOffers'> &
     {technicalPath?: string[]})[];
@@ -9,7 +9,7 @@ export type CoverageSnapshot = Pick<RunReport,
 
 export function coverageSnapshot(report: RunReport): CoverageSnapshot {
   return {
-    startedAt: report.startedAt, finishedAt: report.finishedAt,
+    startedAt: report.startedAt, finishedAt: report.finishedAt, batchSnapshotAt:report.batchSnapshotAt,
     attemptedSources: report.attemptedSources, success: report.success, partial: report.partial,
     browser: report.browser, blocked: report.blocked, failed: report.failed,
     rawOffers: report.rawOffers, normalizedOffers: report.normalizedOffers,
@@ -21,8 +21,11 @@ export function coverageSnapshot(report: RunReport): CoverageSnapshot {
   };
 }
 
-export function comparisonBaseline(previous: {run_key?:unknown;report?:any}, runDate:string):RunReport|CoverageSnapshot {
-  return String(previous.run_key)===runDate ? previous.report.comparison?.baseline??previous.report : previous.report;
+export function comparisonBaseline(previous: {run_key?:unknown;report?:any}, runDate:string, snapshotAt:string):RunReport|CoverageSnapshot {
+  // Compare each new crawl with the immediately preceding published report. A finalizer
+  // retry of the same batch snapshot retains the saved baseline rather than self-comparing.
+  const sameSnapshot=String(previous.run_key)===runDate && previous.report.batchSnapshotAt===snapshotAt;
+  return sameSnapshot ? previous.report.comparison?.baseline??previous.report : previous.report;
 }
 
 const count = (value: number | undefined) => Number.isFinite(value) ? Number(value) : null;

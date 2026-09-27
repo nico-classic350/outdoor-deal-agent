@@ -81,6 +81,8 @@ export type SourceCoverage = {
 export type RunReport = {
   startedAt: string;
   finishedAt: string;
+  /** Latest completion timestamp across all batches; stable across finalizer retries. */
+  batchSnapshotAt?: string;
   plannedSources: number;
   attemptedSources: number;
   success: number;
