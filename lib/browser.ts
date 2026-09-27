@@ -24,6 +24,17 @@ type UnblockSessionResult = {
   elapsedMs: number;
 };
 
+export function authenticatedUnblockEndpoint(endpoint: string, baseUrl: string, token: string): string | null {
+  try {
+    const ws = new URL(endpoint);
+    const expected = new URL(baseUrl);
+    // Never attach a credential to a host supplied by a malformed response.
+    if (ws.protocol !== 'wss:' || ws.host !== expected.host || !token) return null;
+    ws.searchParams.set('token', token);
+    return ws.toString();
+  } catch { return null; }
+}
+
 const PRODUCT_SELECTOR = [
   'article',
   '[itemtype*="Product"]',
@@ -201,7 +212,8 @@ async function unblockSessionRequest(url: string, deadline: number): Promise<Unb
     if (!response.ok) return { endpoint: null, httpStatus: response.status, elapsedMs: Date.now() - started };
     const payload = await response.json() as { browserWSEndpoint?: string | null };
     return {
-      endpoint: typeof payload?.browserWSEndpoint === 'string' ? payload.browserWSEndpoint : null,
+      endpoint: typeof payload?.browserWSEndpoint === 'string' && cfg.baseUrl && cfg.unblockUrl
+        ? authenticatedUnblockEndpoint(payload.browserWSEndpoint, cfg.baseUrl, new URL(cfg.unblockUrl).searchParams.get('token') || '') : null,
       httpStatus: response.status,
       elapsedMs: Date.now() - started,
     };
@@ -436,7 +448,7 @@ async function browserExtractOnce(
   const tryLlmFallback = async (): Promise<RawOffer[]> => {
     const snapshot = [...attempts].reverse().find(attempt => attempt.renderedHtml)?.renderedHtml;
     if (!snapshot || !canTry()) return [];
-    const extraction = await llmExtractFromHtml(source, url, snapshot, { timeoutMs: Math.max(1000, Math.min(6000, timeLeft(deadline, 7000))) });
+    const extraction = await llmExtractFromHtml(source, url, snapshot, { timeoutMs: Math.max(1000, Math.min(9000, timeLeft(deadline, 10000))) });
     if (extraction.attempted) {
       llmSteps.push(`llm-pilot-${extraction.mode}-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
       if (extraction.httpStatus) llmSteps.push(`llm-pilot-http-${extraction.httpStatus}`);

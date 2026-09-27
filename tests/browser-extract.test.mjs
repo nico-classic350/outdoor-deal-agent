@@ -14,8 +14,17 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(outputText, filename);
 };
 
-const { browserExtract } = require('../lib/browser.ts');
+const { browserExtract, authenticatedUnblockEndpoint } = require('../lib/browser.ts');
 const shop = { id: 'test-shop', name: 'Test Shop', country: 'DE', baseUrl: 'https://shop.example' };
+
+test('unblock session uses a credential only on the configured Browserless host', () => {
+  const base = 'https://production-ams.browserless.io';
+  const ws = authenticatedUnblockEndpoint('wss://production-ams.browserless.io/p/session/devtools/browser/id', base, 'secret');
+  assert.equal(new URL(ws).searchParams.get('token'), 'secret');
+  assert.equal(authenticatedUnblockEndpoint('wss://attacker.example/p/session', base, 'secret'), null);
+  assert.equal(authenticatedUnblockEndpoint('wss://production-ams.browserless.io:444/p/session', base, 'secret'), null);
+  assert.equal(authenticatedUnblockEndpoint('ws://production-ams.browserless.io/p/session', base, 'secret'), null);
+});
 
 test('blocked shop records unblock and content attempts before accepting a product', async () => {
   const previousFetch = globalThis.fetch;
