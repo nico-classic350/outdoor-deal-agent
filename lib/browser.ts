@@ -78,6 +78,16 @@ function requireTime(deadline: number, cap: number): number {
   return ms;
 }
 
+function playwrightErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  // Never expose a CDP URL: it contains the Browserless token.
+  if (/429|rate.limit|too many requests/i.test(message)) return 'playwright-provider-rate-limited';
+  if (/401|403|unauthori[sz]ed|forbidden/i.test(message)) return 'playwright-provider-auth-error';
+  if (/timeout|timed out/i.test(message)) return 'playwright-timeout';
+  if (/ECONN|ENOTFOUND|EAI_AGAIN|websocket|socket|closed/i.test(message)) return 'playwright-connection-error';
+  return 'playwright-error';
+}
+
 async function contentRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
   const started = Date.now();
   const cfg = browserFallbackConfig();
@@ -334,7 +344,7 @@ async function playwrightFromEndpoint(
     };
   } catch (error) {
     return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started,
-      steps: [...options.steps, error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'playwright-error'] };
+      steps: [...options.steps, error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : playwrightErrorCode(error)] };
   } finally {
     try { if (page) await page.close(); } catch {}
     try { if (browser) await browser.close(); } catch {}
@@ -383,6 +393,8 @@ export async function browserExtract(
   let llmSteps: string[] = [];
   const canTry = () => timeLeft(deadline, 30000) >= 1000;
   const record = (result: BrowserFallbackResult) => { attempts.push(result); return result.offers.length > 0; };
+  const providerLimited = (result: BrowserFallbackResult) => result.httpStatus === 429 ||
+    result.steps?.includes('playwright-provider-rate-limited');
   const done = (result: BrowserFallbackResult): BrowserFallbackResult => {
     const { renderedHtml: _renderedHtml, ...publicResult } = result;
     return {
@@ -419,20 +431,24 @@ export async function browserExtract(
   if (blocked) {
     const unblock = await unblockContentRequest(source, url, deadline);
     if (record(unblock)) return done(unblock);
+    if (providerLimited(unblock)) return done({ ...unblock, steps: ['provider-rate-limited'] });
 
     if (canTry() && browserPlaywrightConfigured()) {
       const handoff = await unblockedPlaywrightRequest(source, url, deadline);
       if (record(handoff)) return done(handoff);
+      if (providerLimited(handoff)) return done({ ...handoff, steps: ['provider-rate-limited'] });
 
       if (canTry()) {
         const stealth = await freshPlaywrightRequest(source, url, true, deadline);
         if (record(stealth)) return done(stealth);
+        if (providerLimited(stealth)) return done({ ...stealth, steps: ['provider-rate-limited'] });
       }
     }
 
     if (canTry()) {
       const content = await contentRequest(source, url, deadline);
       if (record(content)) return done(content);
+      if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
     }
     const llmOffers = await tryLlmFallback();
     if (llmOffers.length) return done({ offers: llmOffers, mode: 'unblock', steps: ['llm-pilot-active-offers'] });
@@ -444,10 +460,12 @@ export async function browserExtract(
 
   const content = await contentRequest(source, url, deadline);
   if (record(content)) return done(content);
+  if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
 
   if (canTry() && browserPlaywrightConfigured()) {
     const playwright = await freshPlaywrightRequest(source, url, false, deadline);
     if (record(playwright)) return done(playwright);
+    if (providerLimited(playwright)) return done({ ...playwright, steps: ['provider-rate-limited'] });
     const llmOffers = await tryLlmFallback();
     if (llmOffers.length) return done({ offers: llmOffers, mode: 'playwright', steps: ['llm-pilot-active-offers'] });
     return done(playwright);

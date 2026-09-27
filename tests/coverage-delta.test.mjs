@@ -20,6 +20,18 @@ test('same-day recrawl compares access, raw products and useful offers without i
   assert.equal(result.metrics.find(m=>m.metric==='normalizedOffers').delta,-1);
   assert.equal(result.sources[0].pricedDelta,null);
   assert.equal(result.sources[1].parsedDelta,7);
+  assert.equal(result.metrics.find(m=>m.metric==='browserRecoveredSources').previous,null);
+});
+
+test('browser contribution and provider throttling have distinct deltas when both runs recorded paths', () => {
+  const base={startedAt:'2026-09-27',finishedAt:'2026-09-27',attemptedSources:2,success:0,
+    partial:1,browser:0,blocked:1,failed:0,rawOffers:1,normalizedOffers:0,qualifiedDeals:0,nearMisses:0,
+    coverage:[{sourceId:'a',name:'A',status:'partial',parsedOffers:1,technicalPath:['browser-success']},
+      {sourceId:'b',name:'B',status:'blocked',parsedOffers:0,technicalPath:['browser-provider-rate-limited']}]};
+  const current={...base,coverage:base.coverage.map(c=>({...c,technicalPath:['browser-success']}))};
+  const metrics=compareCoverage(current,base).metrics;
+  assert.equal(metrics.find(m=>m.metric==='browserRecoveredSources').delta,1);
+  assert.equal(metrics.find(m=>m.metric==='browserProviderLimitedSources').delta,-1);
 });
 
 test('a retry keeps the original same-day baseline; tomorrow uses today as baseline', () => {

@@ -3,7 +3,8 @@ import type { RunReport, SourceCoverage } from './types';
 export type CoverageSnapshot = Pick<RunReport,
   'startedAt'|'finishedAt'|'attemptedSources'|'success'|'partial'|'browser'|'blocked'|'failed'|
   'rawOffers'|'normalizedOffers'|'confirmedSizeOffers'|'qualifiedDeals'|'nearMisses'> & {
-  coverage: Pick<SourceCoverage,'sourceId'|'name'|'status'|'parsedOffers'|'pricedOffers'|'qualifiedOffers'>[];
+  coverage: (Pick<SourceCoverage,'sourceId'|'name'|'status'|'parsedOffers'|'pricedOffers'|'qualifiedOffers'> &
+    {technicalPath?: string[]})[];
 };
 
 export function coverageSnapshot(report: RunReport): CoverageSnapshot {
@@ -15,7 +16,8 @@ export function coverageSnapshot(report: RunReport): CoverageSnapshot {
     confirmedSizeOffers: report.confirmedSizeOffers, qualifiedDeals: report.qualifiedDeals,
     nearMisses: report.nearMisses,
     coverage: report.coverage.map(c => ({sourceId:c.sourceId,name:c.name,status:c.status,
-      parsedOffers:c.parsedOffers,pricedOffers:c.pricedOffers,qualifiedOffers:c.qualifiedOffers})),
+      parsedOffers:c.parsedOffers,pricedOffers:c.pricedOffers,qualifiedOffers:c.qualifiedOffers,
+      ...(c.technicalPath ? {technicalPath:c.technicalPath} : {})})),
   };
 }
 
@@ -32,6 +34,9 @@ export function compareCoverage(current: RunReport, previous: RunReport | Covera
   const oldSources = new Map(old.coverage.map(c => [c.sourceId,c]));
   const reached = (r: RunReport | CoverageSnapshot) => r.success + r.partial + r.browser;
   const productSources = (r: RunReport | CoverageSnapshot) => r.coverage.filter(c => c.parsedOffers > 0).length;
+  const pathCount = (r: RunReport | CoverageSnapshot, marker: string) =>
+    r.coverage.some(c=>!Array.isArray(c.technicalPath)) ? undefined :
+      r.coverage.filter(c=>c.technicalPath?.includes(marker)).length;
   const row = (metric: keyof RunReport, now: number, before: number | undefined) =>
     ({metric, current:now, previous:count(before), delta:diff(now,before)});
   return {
@@ -41,6 +46,8 @@ export function compareCoverage(current: RunReport, previous: RunReport | Covera
       row('attemptedSources',current.attemptedSources,old.attemptedSources),
       {metric:'reachedSources',current:reached(current),previous:reached(old),delta:reached(current)-reached(old)},
       {metric:'sourcesWithProducts',current:productSources(current),previous:productSources(old),delta:productSources(current)-productSources(old)},
+      row('browserRecoveredSources' as keyof RunReport,pathCount(current,'browser-success')??0,pathCount(old,'browser-success')),
+      row('browserProviderLimitedSources' as keyof RunReport,pathCount(current,'browser-provider-rate-limited')??0,pathCount(old,'browser-provider-rate-limited')),
       ...(['success','partial','browser','blocked','failed','rawOffers','normalizedOffers','confirmedSizeOffers','qualifiedDeals','nearMisses'] as const)
         .map(key=>row(key,Number(current[key]??0),old[key])),
     ],

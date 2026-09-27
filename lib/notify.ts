@@ -24,8 +24,8 @@ export async function sendRunNotification(runDate:string,deals:NormalizedOffer[]
     VALUES (${runDate},${snapshotAt},'sending') ON CONFLICT (run_date,snapshot_at) DO NOTHING RETURNING run_date`;
   if(!claimed.length) return 'already-claimed';
   const comparison=report.comparison;
-  const metrics=comparison?.metrics.filter(m=>['reachedSources','sourcesWithProducts','rawOffers','normalizedOffers','confirmedSizeOffers','qualifiedDeals','nearMisses','blocked','failed'].includes(m.metric))||[];
-  const labels:Record<string,string>={reachedSources:'Shops erreicht',sourcesWithProducts:'Shops mit Produkten',rawOffers:'Rohangebote',normalizedOffers:'Verwertbare Angebote',confirmedSizeOffers:'Größe bestätigt',qualifiedDeals:'Bestätigte Deals',nearMisses:'Prüfkandidaten',blocked:'Blockiert',failed:'Fehlgeschlagen'};
+  const metrics=comparison?.metrics.filter(m=>['reachedSources','sourcesWithProducts','browserRecoveredSources','browserProviderLimitedSources','rawOffers','normalizedOffers','confirmedSizeOffers','qualifiedDeals','nearMisses','blocked','failed'].includes(m.metric))||[];
+  const labels:Record<string,string>={reachedSources:'Shops erreicht',sourcesWithProducts:'Shops mit Produkten',browserRecoveredSources:'Browser brachte Produkte',browserProviderLimitedSources:'Browserdienst limitiert',rawOffers:'Rohangebote',normalizedOffers:'Verwertbare Angebote',confirmedSizeOffers:'Größe bestätigt',qualifiedDeals:'Bestätigte Deals',nearMisses:'Prüfkandidaten',blocked:'Blockiert',failed:'Fehlgeschlagen'};
   const changes=comparison?.sources.filter(s=>s.parsedDelta!==0||s.status!==s.previousStatus)||[];
   const html=`<h1>Outdoor Deal Watch · ${esc(runDate)}</h1>
     ${comparison?`<h2>Veränderung zum ${comparison.baselineKind==='same-day-rerun'?'vorigen Bericht von heute':'vorigen Tagesbericht'}</h2>

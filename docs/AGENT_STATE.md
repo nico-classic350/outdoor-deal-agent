@@ -68,6 +68,7 @@ Optional bounded LLM extraction pilot (off unless enabled):
 - `LLM_EXTRACTION_MODE=shadow` to observe results without publishing them; `active` is opt-in after review
 - `LLM_EXTRACTION_SHOPS` (comma-separated; defaults to `mammut-eu`)
 - `LLM_EXTRACTION_MODEL` (defaults to `gpt-6-luna`)
+- Direct HTTP 200 LLM observation is shadow-only for 4camping, Rab and Peak Performance (one parse-empty page per shop; requires `OPENAI_API_KEY`); Browserless 429 stops further provider calls for that shop. Daily coverage compares browser recoveries and provider limits when both snapshots recorded technical paths.
 
 The pilot only runs after a rendered page was received and deterministic extraction returned no offers. It caps the request at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. It requires page evidence for extracted names and prices; listing pages never confirm size or availability. See the README's “LLM extraction pilot” section for its shadow-review and activation procedure.
 

@@ -64,3 +64,27 @@ test('expired source budget avoids Browserless requests', async () => {
     else process.env.BROWSERLESS_API_TOKEN = previousToken;
   }
 });
+
+test('provider 429 stops further Browserless escalation for this shop', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousToken = process.env.BROWSERLESS_API_TOKEN;
+  process.env.BROWSERLESS_API_TOKEN = 'test-token';
+  const requests = [];
+  globalThis.fetch = async url => {
+    requests.push(new URL(url).pathname);
+    return { ok: false, status: 429 };
+  };
+  try {
+    const blocked = await browserExtract(shop, shop.baseUrl, { blocked: true, deadline: Date.now() + 5000 });
+    const empty = await browserExtract(shop, shop.baseUrl, { deadline: Date.now() + 5000 });
+    assert.deepEqual(requests, ['/unblock', '/content']);
+    assert.equal(blocked.httpStatus, 429);
+    assert.equal(empty.httpStatus, 429);
+    assert.ok(blocked.steps.includes('provider-rate-limited'));
+    assert.ok(empty.steps.includes('provider-rate-limited'));
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.BROWSERLESS_API_TOKEN;
+    else process.env.BROWSERLESS_API_TOKEN = previousToken;
+  }
+});
