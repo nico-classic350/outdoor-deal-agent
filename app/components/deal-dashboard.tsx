@@ -75,6 +75,7 @@ export function DealDashboard({deals,near,report,history}:Props){
         <p>Vergleich mit dem {report.comparison.baselineKind==='same-day-rerun'?'vorigen Bericht vom selben Tag':'vorigen Tagesbericht'} ({date(report.comparison.baseline.finishedAt)}). Gleiche Shopliste; Shopstatus und Angebotszahlen können sich auch durch wechselnde Shopseiten ändern.</p></div>
       <div className="delta-grid">{[
         ['Shops erreicht','reachedSources'],['Shops mit Produkten','sourcesWithProducts'],['Rohangebote','rawOffers'],
+        ['Browser brachte Produkte','browserRecoveredSources'],['Browserdienst limitiert','browserProviderLimitedSources'],
         ['Verwertbare Angebote','normalizedOffers'],['Größe bestätigt','confirmedSizeOffers'],
         ['Bestätigte Deals','qualifiedDeals'],['Prüfkandidaten','nearMisses'],['Blockiert','blocked'],['Fehlgeschlagen','failed']
       ].map(([label,key])=>{const metric=report.comparison!.metrics.find(m=>m.metric===key);

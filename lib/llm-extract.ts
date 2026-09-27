@@ -107,8 +107,8 @@ function pageCandidates(html: string, pageUrl: string): Candidate[] {
     if (label.length < 4 || text.length < 12) return;
 
     // Keep product-like links and cards with explicit money. Do not submit general navigation.
-    const productLike = /(?:product|artikel|produkt|hose|pants|trouser|trekking|outdoor|shop|p\/\d)/i.test(url);
-    const hasMoney = /(?:€|EUR|CHF|£|GBP)\s?\d|\d[\d.,]*\s?(?:€|EUR|CHF|£|GBP)/i.test(text);
+    const productLike = /(?:product|artikel|produkt|hose|pants|trouser|trekking|outdoor|shop|p\/\d|kalhoty|pantalon)/i.test(url);
+    const hasMoney = /(?:€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)\s?\d|\d[\d\s.,]*\s?(?:€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)/i.test(text);
     if (!productLike && !hasMoney) return;
 
     seen.add(url);
@@ -125,17 +125,20 @@ function includedEvidence(sourceText: string, quote: string | null | undefined) 
 function moneyFromEvidence(evidence: string | null | undefined): { value: number; currency: string } | null {
   if (!evidence) return null;
   const value = cleanText(evidence);
-  const match = value.match(/(€|EUR|CHF|£|GBP)\s*([\d.,]+)|([\d.,]+)\s*(€|EUR|CHF|£|GBP)/i);
+  const match = value.match(/(€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)\s*([\d][\d\s.,]*)|([\d][\d\s.,]*)\s*(€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)/i);
   if (!match) return null;
   const rawAmount = match[2] || match[3];
   const currencyToken = match[1] || match[4] || '';
   const currency = /^(?:€|EUR)$/i.test(currencyToken) ? 'EUR'
     : /^(?:CHF)$/i.test(currencyToken) ? 'CHF'
-    : /^(?:£|GBP)$/i.test(currencyToken) ? 'GBP' : '';
+    : /^(?:£|GBP)$/i.test(currencyToken) ? 'GBP'
+    : /^(?:Kč|CZK)$/i.test(currencyToken) ? 'CZK'
+    : /^(?:zł|PLN)$/i.test(currencyToken) ? 'PLN' : '';
   if (!currency) return null;
-  const normalized = rawAmount.includes(',') && rawAmount.includes('.')
-    ? rawAmount.replace(/\./g, '').replace(',', '.')
-    : rawAmount.replace(',', '.');
+  const compact = rawAmount.replace(/\s/g,'');
+  const normalized = compact.includes(',') && compact.includes('.')
+    ? compact.replace(/\./g, '').replace(',', '.')
+    : compact.replace(',', '.');
   const number = Number(normalized);
   return Number.isFinite(number) && number > 0 ? { value: number, currency } : null;
 }
@@ -172,8 +175,8 @@ function offersFromOutput(
     // A reference price is accepted only when the source explicitly labels it as such.
     let rrp: number | undefined;
     const rrpLabel = /(?:UVP|listenpreis|statt|original|regular|previous|before|was\s|vorher)/i;
-    const currentPriceLabel = /(?:sale|special|current|offer|price|preis|rabatt|reduziert|jetzt|angebot|prezzo|offerta|prix|actuel)/i;
-    const moneyMentions = candidate.text.match(/(?:€|EUR|CHF|£|GBP)\s?[\d.,]+|[\d.,]+\s?(?:€|EUR|CHF|£|GBP)/gi) || [];
+    const currentPriceLabel = /(?:sale|special|current|offer|price|preis|rabatt|reduziert|jetzt|angebot|prezzo|offerta|prix|actuel|aktuálně|nyní|cena)/i;
+    const moneyMentions = candidate.text.match(/(?:€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)\s?[\d\s.,]+|[\d\s.,]+\s?(?:€|EUR|CHF|£|GBP|Kč|CZK|zł|PLN)/gi) || [];
     if (moneyMentions.length > 1 && !currentPriceLabel.test(item.priceEvidence || '')) continue;
     if (item.rrp && item.rrpCurrency && item.rrpEvidence && rrpLabel.test(item.rrpEvidence) && includedEvidence(candidate.text, item.rrpEvidence)) {
       const parsedRrp = moneyFromEvidence(item.rrpEvidence);

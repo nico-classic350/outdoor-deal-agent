@@ -15,6 +15,7 @@ require.extensions['.ts'] = (module, filename) => {
 
 const { llmExtractFromHtml } = require('../lib/llm-extract.ts');
 const { browserExtract } = require('../lib/browser.ts');
+const { crawlSource } = require('../lib/crawl.ts');
 const shop = { id: 'mammut-eu', name: 'Mammut EU', country: 'DE', baseUrl: 'https://www.mammut.com' };
 const pageUrl = 'https://www.mammut.com/de/de/category/trekking-pants';
 const html = '<main><article><a href="/de/de/products/kento-pants-men">Mammut Kento Pants Men</a><p>Sale price € 54,70 · UVP € 119,95</p></article></main>';
@@ -78,6 +79,19 @@ test('disabled mode does not call the model', async () => {
   assert.equal(result.outcome, 'disabled');
 });
 
+test('Czech shop candidates preserve explicit CZK price evidence', async () => {
+  const source={id:'4camping',name:'4camping',country:'CZ',baseUrl:'https://www.4camping.cz'};
+  const url='https://www.4camping.cz/panske-kalhoty/odlo-pants';
+  const page='<main><div class="catalog-entry"><a href="/panske-kalhoty/odlo-pants">Odlo Hiking Pants</a><span>Aktuálně 1 299 Kč · Původní cena 2 599 Kč</span></div></main>';
+  const offer={url,name:'Odlo Hiking Pants',nameEvidence:'Odlo Hiking Pants',brand:'Odlo',
+    price:1299,priceCurrency:'CZK',priceEvidence:'Aktuálně 1 299 Kč',rrp:null,rrpCurrency:null,rrpEvidence:null};
+  const result=await llmExtractFromHtml(source,url,page,{mode:'shadow',shops:['4camping'],apiKey:'test-key',
+    fetcher:async()=>responseFor(offer)});
+  assert.equal(result.candidateCount,1);
+  assert.equal(result.observedOffers[0].price,1299);
+  assert.equal(result.observedOffers[0].currency,'CZK');
+});
+
 test('browser fallback runs the allowlisted LLM in shadow mode without publishing its offers', async () => {
   const keys = ['BROWSERLESS_API_TOKEN', 'BROWSERLESS_PLAYWRIGHT', 'LLM_EXTRACTION_MODE', 'LLM_EXTRACTION_SHOPS', 'OPENAI_API_KEY'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
@@ -109,5 +123,41 @@ test('browser fallback runs the allowlisted LLM in shadow mode without publishin
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
+  }
+});
+
+test('direct 200 HTML can be observed by LLM without changing published offers', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousToken = process.env.BROWSERLESS_API_TOKEN;
+  delete process.env.BROWSERLESS_API_TOKEN;
+  process.env.OPENAI_API_KEY = 'test-key';
+  const source = { id:'4camping', name:'4camping', country:'CZ', baseUrl:'https://www.4camping.cz' };
+  const productUrl = 'https://www.4camping.cz/panske-kalhoty/odlo-pants';
+  const listing = '<main><div class="catalog-entry"><a href="/panske-kalhoty/odlo-pants">Odlo Hiking Pants</a><span>Sale price € 54,70 · UVP € 119,95</span></div></main>';
+  let modelCalls = 0;
+  globalThis.fetch = async url => {
+    const u = String(url);
+    if (u.endsWith('/robots.txt')) return {ok:false,status:404};
+    if (u.endsWith('/sitemap.xml')) return {ok:true,status:200,text:async()=>`<loc>${productUrl}</loc>`};
+    if (u.endsWith('/sitemap_index.xml')) return {ok:false,status:404};
+    if (u === productUrl) return {ok:true,status:200,text:async()=>listing};
+    if (u === 'https://api.openai.com/v1/responses') {
+      modelCalls++;
+      return responseFor({...validOffer,url:productUrl,name:'Odlo Hiking Pants',nameEvidence:'Odlo Hiking Pants',brand:'Odlo'});
+    }
+    throw new Error(`unexpected request: ${u}`);
+  };
+  try {
+    const result = await crawlSource(source);
+    assert.equal(modelCalls,1);
+    assert.ok(result.coverage.technicalPath.includes('llm-direct-shadow-success-candidates-1-offers-1'));
+    assert.equal(result.offers.length,0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    if (previousToken === undefined) delete process.env.BROWSERLESS_API_TOKEN;
+    else process.env.BROWSERLESS_API_TOKEN = previousToken;
   }
 });

@@ -6,6 +6,7 @@ import { browserExtract, browserFallbackConfigured, browserFallbackMode } from '
 import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
+import { llmExtractFromHtml } from './llm-extract';
 import robotsParser from 'robots-parser';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
@@ -15,6 +16,7 @@ const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOUR
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
+const LLM_DIRECT_SHADOW_SHOPS = new Set(['4camping', 'rab-eu', 'peakperformance-eu']);
 
 async function get(url:string, source:ShopSource, ms=10000, deadline=Infinity){
   let current=url;
@@ -67,9 +69,15 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
   }
   const filtered=urls.filter(u=>{
     if(!safeShopUrl(source,u)) return false;
-    const s=u.toLowerCase(); return BRAND_TERMS.some(b=>s.includes(b.replace(/[^a-z0-9]/g,''))||s.includes(b)) || /(herren|men|pants|hose|hosen|trousers|outdoor|trekking|wandern|sale|outlet)/.test(s);
+    const s=u.toLowerCase(); return BRAND_TERMS.some(b=>s.includes(b.replace(/[^a-z0-9]/g,''))||s.includes(b)) || /(herren|men|pants|hose|hosen|trousers|outdoor|trekking|wandern|sale|outlet|kalhoty|panske|spodnie|meskie|pantaloni|pantalon)/.test(s);
   });
-  return [...new Set(filtered)].slice(0,120);
+  const unique=[...new Set(filtered)];
+  if(source.id==='4camping') unique.sort((a,b)=>{
+    const rank=(url:string)=>Number(/kalhoty|pants|hose|hosen|trousers/i.test(url))*4 +
+      Number(/panske|men|herren/i.test(url))*2 + Number(BRAND_TERMS.some(brand=>url.toLowerCase().includes(brand)));
+    return rank(b)-rank(a);
+  });
+  return unique.slice(0,120);
 }
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
@@ -78,6 +86,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
   let parseEmptyHttp200 = 0;
   let earlyBrowserTried = false;
+  let directLlmTried = false;
   const coverage=(status:SourceCoverage['status'], note?:string):SourceCoverage=>({
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
@@ -98,6 +107,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('browser-success');
       } else {
         technicalPath.push('browser-empty');
+      }
+      if(result.steps?.includes('provider-rate-limited')) {
+        technicalPath.push('browser-provider-rate-limited');
+        break;
       }
       if(offers.length>before) break;
     }
@@ -237,6 +250,19 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           technicalPath.push('parsed-product-data');
           offers.push(...x);
           continue;
+        }
+
+        if (!directLlmTried && LLM_DIRECT_SHADOW_SHOPS.has(source.id) && deadline-Date.now()>7000) {
+          directLlmTried = true;
+          // One bounded observation per shop; direct HTML is available even when Browserless is throttled.
+          // Never promote these candidates into the crawl until their evidence has been reviewed.
+          const extraction=await llmExtractFromHtml(source,url,html,{
+            mode:'shadow',shops:[...LLM_DIRECT_SHADOW_SHOPS],timeoutMs:Math.min(6000,deadline-Date.now()-1000),
+          });
+          technicalPath.push(`llm-direct-shadow-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
+          if(extraction.attempted) console.info(JSON.stringify({event:'llm-direct-shadow',sourceId:source.id,
+            outcome:extraction.outcome,candidates:extraction.candidateCount,offers:extraction.observedOffers.length,
+            elapsedMs:extraction.elapsedMs}));
         }
 
         parseEmptyHttp200 += 1;
