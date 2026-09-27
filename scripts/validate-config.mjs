@@ -80,6 +80,8 @@ assert(Boolean(batchSizeMatch),'batch size is statically discoverable');
 const batchSize=batchSizeMatch?Number(batchSizeMatch[1]):0;
 const expectedBatches=batchSize?Math.ceil(shopLines.length/batchSize):0;
 const crons=Array.isArray(vercel.crons)?vercel.crons:[];
+assert(crons.every(c=>/^\d{1,2} \d{1,2} \S+ \S+ \S+$/.test(String(c.schedule||''))),
+  'all Vercel Hobby cron schedules run at most once per day');
 const batchCronIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/batch\/(\d+)$/)).filter(Boolean).map(m=>Number(m[1])).sort((a,b)=>a-b);
 const expectedIndexes=Array.from({length:expectedBatches},(_,i)=>i);
 assert(JSON.stringify(batchCronIndexes)===JSON.stringify(expectedIndexes),`Vercel schedules exactly ${expectedBatches} batch crons`);
