@@ -16,29 +16,36 @@ function brandOf(o:RawOffer){
     return new RegExp(`(?:^|[^a-zà-ž])${term}(?=$|[^a-zà-ž])`,'i').test(title);
   })||'';
 }
-export async function normalizeOffer(o:RawOffer):Promise<NormalizedOffer|null>{
-  const brand=brandOf(o); if(!brand || !o.name || !o.currency || !o.price) return null;
+export type RejectionReason = 'brand-or-price-missing'|'discount-unverified'|'product-mismatch'|
+  'sold-out'|'excluded-color'|'low-product-fit'|'incompatible-size';
+export async function normalizeOfferChecked(o:RawOffer):Promise<{offer:NormalizedOffer|null;reason?:RejectionReason}>{
+  const brand=brandOf(o); if(!brand || !o.name || !o.currency || !o.price) return {offer:null,reason:'brand-or-price-missing'};
   const rrp=o.rrp && o.rrp>o.price && o.rrpSource ? o.rrp : undefined;
   const rrpVerified=Boolean(rrp&&o.rrpSource);
   const discountVerified=Boolean(o.discountSource && Number.isFinite(o.observedDiscountPct) && o.observedDiscountPct!>=40);
-  if(!rrpVerified&&!discountVerified) return null;
-  if (!productEligible(o.name,o.description)) return null;
-  if (/out.of.stock|sold.out|ausverkauft|nicht.verfügbar/i.test(o.availability || '')) return null;
+  if(!rrpVerified&&!discountVerified) return {offer:null,reason:'discount-unverified'};
+  if (!productEligible(o.name,o.description)) return {offer:null,reason:'product-mismatch'};
+  if (/out.of.stock|sold.out|ausverkauft|nicht.verfügbar/i.test(o.availability || '')) return {offer:null,reason:'sold-out'};
   const color=(o.color||'').toLowerCase();
-  if(/white|weiß|weiss|blanc|bianco|neon|fluorescen|knall/i.test(color)) return null;
-  const text=`${o.name} ${o.description||''}`;
+  if(/white|weiß|weiss|blanc|bianco|neon|fluorescen|knall/i.test(color)) return {offer:null,reason:'excluded-color'};
   const colorBonus=/navy|dark blue|light blue|blue|black|schwarz|blau|grey|gray|grau/i.test(color)?5:0;
-  const fit=Math.min(100,productFitScore(text)+colorBonus); if(fit<45) return null;
-  const sizeFit=inferSizeFit(o.sizes); if(sizeFit==='no') return null;
+  const fit=Math.min(100,productFitScore(o.name,o.description)+colorBonus); if(fit<45) return {offer:null,reason:'low-product-fit'};
+  const sizeFit=inferSizeFit(o.sizes); if(sizeFit==='no') return {offer:null,reason:'incompatible-size'};
   const priceEur=await eurValue(o.price,o.currency), rrpEur=rrp?await eurValue(rrp,o.currency):null;
   const shippingKnown=o.shipping!=null;
   const shippingEur=shippingKnown?await eurValue(o.shipping!,o.currency):0;
   const returnCostEur=o.returnCost==null?null:await eurValue(o.returnCost,o.currency);
   const effectiveCostEur=priceEur+shippingEur+(returnCostEur||0);
   const nominalDiscountPct=rrpEur ? (1-priceEur/rrpEur)*100 : Number(o.observedDiscountPct);
-  const effectiveDiscountPct=rrpEur ? (1-effectiveCostEur/rrpEur)*100 : Number(o.observedDiscountPct);
+  // A merchant badge is valid evidence without an RRP. Use its implied ratio
+  // only to subtract delivery/return costs; never expose it as a verified RRP.
+  const effectiveDiscountPct=rrpEur ? (1-effectiveCostEur/rrpEur)*100
+    : (1-(effectiveCostEur/priceEur)*(1-Number(o.observedDiscountPct)/100))*100;
   const trustedSizeFit=o.sizeAvailability==='available'?sizeFit:sizeFit==='confirmed'?'unconfirmed':sizeFit;
   const base={...o,brand,name:o.name,currency:o.currency,price:o.price,rrp:rrp??null,priceEur,rrpEur,shippingEur,shippingKnown,rrpVerified,discountVerified,returnCostEur,effectiveCostEur,nominalDiscountPct,effectiveDiscountPct,sizeFit:trustedSizeFit,productFitScore:fit};
   const score=dealScore(base as any), klass=dealClass(effectiveDiscountPct,trustedSizeFit,fit);
-  return {...base,score,class:klass};
+  return {offer:{...base,score,class:klass}};
+}
+export async function normalizeOffer(o:RawOffer):Promise<NormalizedOffer|null>{
+  return (await normalizeOfferChecked(o)).offer;
 }

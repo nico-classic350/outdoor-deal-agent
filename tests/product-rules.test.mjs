@@ -12,12 +12,16 @@ test('rejects explicit product mismatches while allowing eligible outdoor trouse
   assert.equal(productEligible('Herren Outdoorhose', 'Leichte Wanderhose für Reisen'), true);
   assert.equal(productEligible('Damen Wanderhose'), false);
   assert.equal(productEligible('Herren Trekkinghose Zip-off'), false);
+  assert.equal(productEligible('Herren Softshell Pants Light', 'Leichtes Stretchmaterial, wasserdichte Tasche; passende Shorts separat erhältlich'), true);
+  assert.equal(productEligible('Herren Climbing Pants', 'Leichte Kletterhose für Reisen und Wandern'), true);
+  assert.equal(productEligible('Herren Outdoorhose', 'Damen Wanderhose'), false);
 });
 
 test('unknown size stays reviewable while explicit incompatible size is rejected', () => {
   assert.equal(sizeEvidence(['W33 L32']), 'confirmed');
   assert.equal(sizeEvidence(['34/30']), 'confirmed');
   assert.equal(sizeEvidence(['33']), 'probable');
+  assert.equal(sizeEvidence(['W33']), 'probable');
   assert.equal(sizeEvidence(['EU 50']), 'probable');
   assert.equal(sizeEvidence(['L']), 'confirmed');
   assert.equal(sizeEvidence(['L Regular']), 'confirmed');
@@ -70,6 +74,15 @@ test('sixth qualifying deal is not relabeled as a near miss', () => {
   assert.equal(result.qualifiedCount,6);
   assert.equal(result.deals.length,5);
   assert.equal(result.near.length,0);
+});
+
+test('uncertain sizes remain visible beyond the old three-candidate ceiling', () => {
+  const offers=Array.from({length:8},(_,i)=>({sourceId:'x',brand:'Stoic',name:'Herren Wanderhose',
+    url:`https://example.org/p/${i}`,sizeFit:'unconfirmed',shippingKnown:false,discountVerified:true,
+    effectiveDiscountPct:58,effectiveCostEur:65,productFitScore:80,score:80-i}));
+  const result=selectOffers(offers);
+  assert.equal(result.deals.length,0);
+  assert.equal(result.near.length,8);
 });
 
 test('a cheaper unverified variant does not hide a verified variant at the same URL', () => {

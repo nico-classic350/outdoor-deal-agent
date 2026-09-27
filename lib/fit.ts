@@ -1,9 +1,9 @@
 import { PROFILE } from '../config/profile';
 import { productEligible } from './product-rules.mjs';
-export function productFitScore(text:string): number {
-  if (!productEligible(text)) return 0;
-  const t = text.toLowerCase();
-  if (PROFILE.excludedProductTerms.some(x=>t.includes(x))) return 0;
+export function productFitScore(name:string, description = ''): number {
+  if (!productEligible(name, description)) return 0;
+  const t = `${name} ${description}`.toLowerCase();
+  if (PROFILE.excludedProductTerms.some(x=>name.toLowerCase().includes(x))) return 0;
   if (/heavyweight|schwere winterhose|extra thick|dick gefüttert/i.test(t)) return 0;
   let score = 55;
   const plus = ['stretch','lightweight','leicht','packable','schnelltrock','quick dry','abrasion','robust','travel','trekking','hiking','regular fit'];

@@ -3,13 +3,14 @@ import { neon } from '@neondatabase/serverless';
 import { SHOPS } from '../config/shops';
 import { PROFILE } from '../config/profile';
 import { crawlSource } from './crawl';
-import { normalizeOffer } from './normalize';
+import { normalizeOfferChecked } from './normalize';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
 import { latestRun, saveRun } from './store';
 import { compareCoverage, comparisonBaseline } from './coverage-delta';
 import { sendRunNotification } from './notify';
 import { diagnoseCoverage } from './diagnose';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
+import { fillVerifiedShipping } from './shipping';
 
 export const BATCH_SIZE = 6;
 export const BATCH_COUNT = Math.ceil(SHOPS.length / BATCH_SIZE);
@@ -56,9 +57,11 @@ export async function runBatch(batchIndex: number) {
 
   const results = await Promise.all(sources.map((source) => limit(() => crawlSource(source))));
   const raw = results.flatMap((r) => r.offers);
-  const attempted = await Promise.allSettled(raw.map(normalizeOffer));
-  const normalized = attempted.filter((r):r is PromiseFulfilledResult<NormalizedOffer|null>=>r.status==='fulfilled')
-    .map(r=>r.value).filter(Boolean) as NormalizedOffer[];
+  const shippingVerified = await fillVerifiedShipping(raw);
+  if (shippingVerified) results.find(r => r.coverage.sourceId === 'bergfreunde')?.coverage.technicalPath?.push('merchant-shipping-policy-verified');
+  const attempted = await Promise.allSettled(raw.map(normalizeOfferChecked));
+  const normalized = attempted.filter((r):r is PromiseFulfilledResult<Awaited<ReturnType<typeof normalizeOfferChecked>>>=>r.status==='fulfilled')
+    .map(r=>r.value.offer).filter(Boolean) as NormalizedOffer[];
   const rejected = attempted.filter(r=>r.status==='rejected').length;
   if(rejected) console.warn(`[batch] rejected-offers date=${runDate} batch=${batchIndex} count=${rejected}`);
   const coverage = results.map((r) => r.coverage);
@@ -66,6 +69,16 @@ export async function runBatch(batchIndex: number) {
     const items=normalized.filter(o=>o.sourceId===c.sourceId);
     const sourceRaw=raw.filter(o=>o.sourceId===c.sourceId);
     c.eligibleOffers=sourceRaw.filter(o=>Boolean(o.name&&productEligible(o.name,o.description))).length;
+    c.priceEvidenceOffers=sourceRaw.filter(o=>o.name && productEligible(o.name,o.description) &&
+      (Boolean(o.rrp && o.rrp>Number(o.price) && o.rrpSource)
+        || Boolean(o.discountSource && Number.isFinite(o.observedDiscountPct) && Number(o.observedDiscountPct)>=40))).length;
+    c.rejectionReasons={};
+    raw.forEach((o,index)=>{
+      if(o.sourceId!==c.sourceId)return;
+      const result=attempted[index];
+      const reason=result.status==='rejected'?'conversion-error':result.value.reason;
+      if(reason)c.rejectionReasons![reason]=(c.rejectionReasons![reason]||0)+1;
+    });
     c.pricedOffers=items.length;
     c.verifiedReferenceOffers=items.filter(o=>o.rrpVerified).length;
     c.availableSizeOffers=items.filter(o=>o.sizeFit==='confirmed').length;

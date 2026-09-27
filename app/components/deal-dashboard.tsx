@@ -6,8 +6,12 @@ import type { NormalizedOffer, RunReport } from '../../lib/types';
 type History=Record<string,{date:string,price:number}[]>;
 type Props={deals:NormalizedOffer[];near:NormalizedOffer[];report:RunReport|null;history:History};
 const diagnosis:Record<string,string>={blocked:'Zugriff blockiert', 'parser-empty':'Keine Produkte extrahiert',
-  'no-relevant-products':'Keine passenden langen Hosen', 'no-reference-price':'Referenzpreis fehlt',
+  'no-relevant-products':'Keine passenden langen Hosen', 'no-reference-price':'Rabatt oder Referenzpreis nicht belegt',
+  'selection-filtered':'Preisbeleg vorhanden, weitere Auswahlregel greift',
   'size-unverified':'Größe nicht kaufbar bestätigt', 'no-qualified-deal':'Kein Deal über der Schwelle'};
+const rejection:Record<string,string>={'brand-or-price-missing':'Marke/Preis fehlt','discount-unverified':'Rabatt nicht belegt',
+  'product-mismatch':'Produkt unpassend','sold-out':'Nicht verfügbar','excluded-color':'Farbe ausgeschlossen',
+  'low-product-fit':'Produktfit zu niedrig','incompatible-size':'Größe unpassend','conversion-error':'Währungsumrechnung fehlgeschlagen'};
 function key(o:NormalizedOffer){
   try{const u=new URL(o.url);u.hash='';for(const p of [...u.searchParams.keys()])
     if(/^(?:utm_.*|gclid|fbclid|ref|source|campaign)$/i.test(p))u.searchParams.delete(p);
@@ -87,9 +91,11 @@ export function DealDashboard({deals,near,report,history}:Props){
       <p>Produktkarten allein gelten nicht als bestätigte Deals.</p></div>
       {coverage.length?<div className="source-list">{coverage.map(c=>{const prior=report?.comparison?.sources.find(s=>s.sourceId===c.sourceId);
         return <div className="source-row" key={c.sourceId}><strong>{c.name}</strong>
-        <span className={`status ${c.status}`}>{c.status}</span><span>{c.parsedOffers} entdeckt</span>
+        <span className={`status ${c.status}`}>{c.status}</span><span>{c.parsedOffers} entdeckt · {c.priceEvidenceOffers??'—'} Preisbelege</span>
         <span title={c.diagnosticCode?diagnosis[c.diagnosticCode]:undefined}>{c.diagnosticCode?diagnosis[c.diagnosticCode]:`${c.qualifiedOffers??0} Deals`}</span>
         <span>{c.qualifiedOffers??0} Deals</span>
+        {c.rejectionReasons && Object.keys(c.rejectionReasons).length>0?<small className="source-delta">Auswahlgründe: {Object.entries(c.rejectionReasons)
+          .sort((a,b)=>b[1]-a[1]).slice(0,3).map(([reason,count])=>`${rejection[reason]||reason}: ${count}`).join(' · ')}</small>:null}
         {prior?<small className="source-delta">Vorher {prior.previousStatus??'—'} · Rohangebote {prior.previousParsedOffers??'—'} → {c.parsedOffers} ({change(prior.parsedDelta)}) · verwertbar {prior.previousPricedOffers??'—'} → {prior.pricedOffers??'—'} ({change(prior.pricedDelta)}) · Deals {prior.previousQualifiedOffers??'—'} → {prior.qualifiedOffers??'—'} ({change(prior.qualifiedDelta)})</small>:null}</div>})}</div>
         :<div className="empty">Noch kein vollständiger Lauf vorhanden.</div>}
     </section><footer>Outdoor Deal Watch · Belege vor Rabatten · Angebote im Shop erneut prüfen</footer>

@@ -26,3 +26,8 @@ test('a verified merchant discount is not misdiagnosed as a missing reference pr
   assert.equal(diagnoseCoverage({ status: 'success', parsedOffers: 124, eligibleOffers: 75,
     pricedOffers: 45, verifiedReferenceOffers: 0, availableSizeOffers: 0 }), 'size-unverified');
 });
+
+test('price evidence can exist even when a later selection rule rejects every product', () => {
+  assert.equal(diagnoseCoverage({ status:'partial', parsedOffers: 10, eligibleOffers: 5,
+    priceEvidenceOffers: 3, pricedOffers: 0 }), 'selection-filtered');
+});
