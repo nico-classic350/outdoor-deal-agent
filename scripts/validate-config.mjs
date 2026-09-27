@@ -88,6 +88,8 @@ assert(JSON.stringify(retryIndexes)===JSON.stringify(expectedIndexes),`Vercel sc
 assert(crons.filter(c=>c.path==='/api/finalize').length===1,'exactly one finalizer cron exists');
 assert(crons.filter(c=>c.path==='/api/finalize-retry').length===1,'exactly one finalizer retry cron exists');
 assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 7 * * *','finalizer retry runs after batch recovery window');
+assert(crons.filter(c=>c.path==='/api/watchdog').length===1,'one watchdog cron monitors delayed or missing daily work');
+assert(crons.find(c=>c.path==='/api/watchdog')?.schedule==='*/30 6-9 * * *','watchdog has recurring recovery slots after batch crons');
 assert(!crons.some(c=>c.path==='/api/run'||c.path==='/api/admin/run'),'monolithic run routes are not scheduled');
 
 const scheduleCounts=new Map();
@@ -95,7 +97,7 @@ for(const cron of crons.filter(c=>/^\/api\/batch\//.test(String(c.path||'')))){
   const schedule=String(cron.schedule||''); scheduleCounts.set(schedule,(scheduleCounts.get(schedule)||0)+1);
 }
 assert([...scheduleCounts.values()].every(count=>count<=4),'no batch time slot schedules more than four functions');
-for(const route of ['app/api/batch/[batch]/route.ts','app/api/retry-batch/[batch]/route.ts','app/api/finalize/route.ts','app/api/finalize-retry/route.ts']){
+for(const route of ['app/api/batch/[batch]/route.ts','app/api/retry-batch/[batch]/route.ts','app/api/finalize/route.ts','app/api/finalize-retry/route.ts','app/api/watchdog/route.ts']){
   const source=read(route); assert(source.includes('CRON_SECRET')&&source.includes('authorization'),`${route} requires cron authorization`);
 }
 for(const route of ['app/api/run/route.ts','app/api/admin/run/route.ts']){

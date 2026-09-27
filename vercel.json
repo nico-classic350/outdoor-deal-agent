@@ -42,6 +42,7 @@
     { "path": "/api/retry-batch/14", "schedule": "14 5 * * *" },
     { "path": "/api/retry-batch/15", "schedule": "15 5 * * *" },
     { "path": "/api/finalize-retry", "schedule": "0 7 * * *" },
+    { "path": "/api/watchdog", "schedule": "*/30 6-9 * * *" },
     { "path": "/api/pilot-smoke", "schedule": "20 7 27 9 *" }
   ]
 }
