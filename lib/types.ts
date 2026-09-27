@@ -96,4 +96,5 @@ export type RunReport = {
   qualifiedDeals: number;
   nearMisses: number;
   coverage: SourceCoverage[];
+  comparison?: ReturnType<typeof import('./coverage-delta').compareCoverage>;
 };

@@ -16,6 +16,7 @@ function key(o:NormalizedOffer){
 }
 function euro(v:number){return new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(v)}
 function date(v:string){return new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(v))}
+function change(value:number|null){return value===null?'—':`${value>0?'+':''}${value}`}
 
 function DealCard({offer,history,saved,toggle}:{offer:NormalizedOffer;history:History;saved:boolean;toggle:()=>void}){
   const points=history[key(offer)]||[];
@@ -69,12 +70,26 @@ export function DealDashboard({deals,near,report,history}:Props){
         :<div className="empty"><strong>{tab==='deals'?'Heute kein bestätigter Deal.':tab==='near'?'Keine Prüfkandidaten.':'Noch nichts gemerkt.'}</strong>
           <p>{tab==='deals'?'Die Prüfung verlangt eine kaufbare Größe, belegten Referenzpreis und geklärte Versandkosten.':'Neue Ergebnisse erscheinen nach dem nächsten vollständigen Suchlauf.'}</p></div>}
     </section>
+    {report?.comparison?<section className="coverage-delta" aria-label="Änderung zum letzten Bericht">
+      <div className="section-heading"><div><p className="overline dark">WIRKUNG DER SUCHE</p><h2>Was hat sich verändert?</h2></div>
+        <p>Vergleich mit dem {report.comparison.baselineKind==='same-day-rerun'?'vorigen Bericht vom selben Tag':'vorigen Tagesbericht'} ({date(report.comparison.baseline.finishedAt)}). Gleiche Shopliste; Shopstatus und Angebotszahlen können sich auch durch wechselnde Shopseiten ändern.</p></div>
+      <div className="delta-grid">{[
+        ['Shops erreicht','reachedSources'],['Shops mit Produkten','sourcesWithProducts'],['Rohangebote','rawOffers'],
+        ['Verwertbare Angebote','normalizedOffers'],['Größe bestätigt','confirmedSizeOffers'],
+        ['Bestätigte Deals','qualifiedDeals'],['Prüfkandidaten','nearMisses'],['Blockiert','blocked'],['Fehlgeschlagen','failed']
+      ].map(([label,key])=>{const metric=report.comparison!.metrics.find(m=>m.metric===key);
+        return metric?<div key={key}><span>{label}</span><strong>{metric.previous??'—'} → {metric.current}</strong>
+          <small>{change(metric.delta)}</small></div>:null})}</div>
+      <p className="delta-note">„Erreicht“ umfasst erfolgreich, teilweise erfolgreich und Browser-Erfassung. „Mit Produkten“ zählt Shops mit mindestens einem Rohangebot. Ein Strich bedeutet, dass der frühere Bericht diesen Wert nicht erfasst hat.</p>
+    </section>:null}
     <section className="sources"><div className="section-heading"><div><p className="overline dark">TRANSPARENZ</p><h2>Quellenstatus</h2></div>
       <p>Produktkarten allein gelten nicht als bestätigte Deals.</p></div>
-      {coverage.length?<div className="source-list">{coverage.map(c=><div className="source-row" key={c.sourceId}><strong>{c.name}</strong>
+      {coverage.length?<div className="source-list">{coverage.map(c=>{const prior=report?.comparison?.sources.find(s=>s.sourceId===c.sourceId);
+        return <div className="source-row" key={c.sourceId}><strong>{c.name}</strong>
         <span className={`status ${c.status}`}>{c.status}</span><span>{c.parsedOffers} entdeckt</span>
         <span title={c.diagnosticCode?diagnosis[c.diagnosticCode]:undefined}>{c.diagnosticCode?diagnosis[c.diagnosticCode]:`${c.qualifiedOffers??0} Deals`}</span>
-        <span>{c.qualifiedOffers??0} Deals</span></div>)}</div>
+        <span>{c.qualifiedOffers??0} Deals</span>
+        {prior?<small className="source-delta">Vorher {prior.previousStatus??'—'} · Rohangebote {prior.previousParsedOffers??'—'} → {c.parsedOffers} ({change(prior.parsedDelta)}) · verwertbar {prior.previousPricedOffers??'—'} → {prior.pricedOffers??'—'} ({change(prior.pricedDelta)}) · Deals {prior.previousQualifiedOffers??'—'} → {prior.qualifiedOffers??'—'} ({change(prior.qualifiedDelta)})</small>:null}</div>})}</div>
         :<div className="empty">Noch kein vollständiger Lauf vorhanden.</div>}
     </section><footer>Outdoor Deal Watch · Belege vor Rabatten · Angebote im Shop erneut prüfen</footer>
   </main>;
