@@ -5,9 +5,9 @@ export function diagnoseCoverage(c:SourceCoverage):SourceCoverage['diagnosticCod
   if(c.status==='blocked' && c.parsedOffers===0)return 'blocked';
   if(c.parsedOffers===0)return 'parser-empty';
   if(!c.eligibleOffers)return 'no-relevant-products';
-  // Normalization also accepts an explicitly displayed merchant discount.
-  // pricedOffers therefore establishes price evidence even without an RRP.
-  if(!c.pricedOffers)return 'no-reference-price';
+  // The raw price-evidence count must not be confused with fully normalized offers.
+  if(!(c.priceEvidenceOffers??c.pricedOffers))return 'no-reference-price';
+  if(!c.pricedOffers)return 'selection-filtered';
   if(!c.availableSizeOffers)return 'size-unverified';
   if(!c.qualifiedOffers)return 'no-qualified-deal';
   return undefined;

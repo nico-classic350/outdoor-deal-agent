@@ -93,3 +93,21 @@ test('available L variant can qualify using displayed discount with no RRP',asyn
   assert.equal(offer?.discountVerified,true);
   assert.equal(offer?.rrp,null);
 });
+
+test('shipping reduces an explicitly displayed merchant discount without inventing an RRP',async()=>{
+  const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',
+    url:'https://www.bergfreunde.de/pants',brand:'Stoic',name:'Hoforsst Softshell Pants Light',
+    currency:'EUR',price:67.98,shipping:3.95,sizes:['L Regular'],sizeAvailability:'available',
+    observedDiscountPct:60,discountSource:'merchant:displayed-discount'});
+  assert.equal(offer?.rrp,null);
+  assert.ok(offer && offer.effectiveDiscountPct < 60 && offer.effectiveDiscountPct > 55);
+});
+
+test('a long trekking trouser survives incidental mentions of shorts and waterproof pockets',async()=>{
+  const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',
+    url:'https://www.bergfreunde.de/pants',brand:'Stoic',name:'Herren Trekking Pants Light',
+    description:'Leichte Trekkinghose mit wasserdichter Tasche; passende Shorts separat erhältlich',
+    currency:'EUR',price:60,rrp:120,rrpSource:'merchant:reference-price',sizes:[]});
+  assert.ok(offer);
+  assert.equal(offer.sizeFit,'unconfirmed');
+});

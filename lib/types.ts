@@ -67,11 +67,14 @@ export type SourceCoverage = {
   discoveredUrls: number;
   parsedOffers: number;
   eligibleOffers?: number;
+  /** Raw observations with a variant-linked RRP or an explicit merchant discount. */
+  priceEvidenceOffers?: number;
+  rejectionReasons?: Record<string,number>;
   pricedOffers?: number;
   verifiedReferenceOffers?: number;
   availableSizeOffers?: number;
   qualifiedOffers?: number;
-  diagnosticCode?: 'blocked'|'parser-empty'|'no-relevant-products'|'no-reference-price'|'size-unverified'|'no-qualified-deal';
+  diagnosticCode?: 'blocked'|'parser-empty'|'no-relevant-products'|'no-reference-price'|'selection-filtered'|'size-unverified'|'no-qualified-deal';
   elapsedMs: number;
   note?: string;
   technicalPath?: string[];
