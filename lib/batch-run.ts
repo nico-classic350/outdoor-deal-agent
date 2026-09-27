@@ -94,10 +94,27 @@ export async function runBatch(batchIndex: number) {
 export async function retryMissingBatch(batchIndex:number){
   if (!Number.isInteger(batchIndex) || batchIndex<0 || batchIndex>=BATCH_COUNT) throw new Error('invalid batch index');
   const sql=await db(), runDate=utcDateKey();
-  const rows=await sql`SELECT source_count FROM agent_batch_runs WHERE run_date=${runDate} AND batch_index=${batchIndex}`;
-  const expected=SHOPS.slice(batchIndex*BATCH_SIZE,(batchIndex+1)*BATCH_SIZE).length;
-  if(Number(rows[0]?.source_count)===expected) return {runDate,batchIndex,skipped:true};
-  return runBatch(batchIndex);
+  await sql`CREATE TABLE IF NOT EXISTS agent_batch_retry_leases(
+    run_date text NOT NULL, batch_index integer NOT NULL,
+    token text NOT NULL, lease_until timestamptz NOT NULL,
+    PRIMARY KEY(run_date,batch_index)
+  )`;
+  const token=crypto.randomUUID();
+  const claimed=await sql`INSERT INTO agent_batch_retry_leases(run_date,batch_index,token,lease_until)
+    VALUES (${runDate},${batchIndex},${token},now()+interval '6 minutes')
+    ON CONFLICT (run_date,batch_index) DO UPDATE SET
+      token=EXCLUDED.token, lease_until=EXCLUDED.lease_until
+    WHERE agent_batch_retry_leases.lease_until < now()
+    RETURNING token`;
+  if(!claimed.length) return {runDate,batchIndex,skipped:true,reason:'retry-already-running'};
+  try {
+    const rows=await sql`SELECT source_count FROM agent_batch_runs WHERE run_date=${runDate} AND batch_index=${batchIndex}`;
+    const expected=SHOPS.slice(batchIndex*BATCH_SIZE,(batchIndex+1)*BATCH_SIZE).length;
+    if(Number(rows[0]?.source_count)===expected) return {runDate,batchIndex,skipped:true,reason:'batch-complete'};
+    return await runBatch(batchIndex);
+  } finally {
+    await sql`DELETE FROM agent_batch_retry_leases WHERE run_date=${runDate} AND batch_index=${batchIndex} AND token=${token}`;
+  }
 }
 
 export async function finalizeBatches(runDate = utcDateKey()) {
