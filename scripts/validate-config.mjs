@@ -89,7 +89,7 @@ assert(crons.filter(c=>c.path==='/api/finalize').length===1,'exactly one finaliz
 assert(crons.filter(c=>c.path==='/api/finalize-retry').length===1,'exactly one finalizer retry cron exists');
 assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 7 * * *','finalizer retry runs after batch recovery window');
 assert(crons.filter(c=>c.path==='/api/watchdog').length===1,'one watchdog cron monitors delayed or missing daily work');
-assert(crons.find(c=>c.path==='/api/watchdog')?.schedule==='*/30 6-9 * * *','watchdog has recurring recovery slots after batch crons');
+assert(crons.find(c=>c.path==='/api/watchdog')?.schedule==='15 8 * * *','watchdog runs once daily after recovery, compatible with Hobby cron limits');
 assert(!crons.some(c=>c.path==='/api/run'||c.path==='/api/admin/run'),'monolithic run routes are not scheduled');
 
 const scheduleCounts=new Map();
