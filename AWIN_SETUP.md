@@ -9,7 +9,8 @@ Existing deal logic remains authoritative:
 - effective discount uses verified MSRP/RRP
 - qualified deal >= 40%
 - Top >= 55%, Strong 45-54%, Good 40-44% only with high product fit
-- score weights remain size 30 / product fit 25 / market advantage 20 / discount 15 / merchant 10
+- score weights are size 30 / product fit 25 / market advantage 20 / discount 15 / merchant 10 when a comparable market price exists; without one, known components are rescaled
+- confirmed deals additionally require a purchasable target size and known shipping cost
 
 ## Source priority
 
@@ -18,10 +19,7 @@ Existing deal logic remains authoritative:
 3. Targeted retailer brand/category listings
 4. Generic feed/sitemap/HTML/browser fallback
 
-Mapped Awin advertisers:
-- Bergfreunde DE: 14102
-- Bergzeit DE/AT: 12557
-- SportScheck DE: 14607
+Mappings live in `lib/awin-feed.ts` (12 advertisers); `/api/awin-health` reports currently joined/approved feeds and their import date. A configured API key alone does not prove merchant coverage.
 
 Awin URLs are used as data inputs. The agent emits the direct merchant product URL (merchant_deep_link), not the Awin tracking URL.
 
@@ -57,13 +55,13 @@ Awin fields used where available:
 - product IDs / parent product IDs
 - merchant image URL
 
-Only in-stock, new, whitelist-brand long men's/unisex trousers enter the existing normalization pipeline.
+Only in-stock, new, whitelist-brand long men's/unisex trousers enter the existing normalization pipeline. Every Awin row retains its own price, RRP, size and stock evidence; values from different variants are never combined into a synthetic deal.
 
 For Awin, rrp_price is required before an offer can be used as a qualified deal. product_price_old is deliberately not promoted to MSRP/RRP.
 
 ## Email behavior
 
-One complete search run -> exactly one consolidated email.
+One complete search run -> at most one consolidated email when `RESEND_API_KEY`, `DEAL_NOTIFY_FROM` and `DEAL_NOTIFY_TO` are configured.
 No per-shop email.
 Email order:
 1. up to 5 qualified deals under the existing score

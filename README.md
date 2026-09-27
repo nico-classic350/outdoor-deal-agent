@@ -8,17 +8,20 @@ For a compact cross-chat project handoff, read `docs/AGENT_STATE.md` first.
 
 The production source is tracked directly in this repository. There is no generated ZIP bootstrap, no build-time source overlay and no `*.override.ts` layer. Vercel and GitHub CI compile the same files that are reviewed in Git.
 
-The daily pipeline runs as 16 Vercel cron batches. Each batch crawls up to six sources with bounded concurrency and persists normalized offers plus source coverage in Neon PostgreSQL. The finalizer publishes a consolidated run only when all expected batches exist; a retry finalizer provides a second completion attempt.
+The daily pipeline runs as 16 Vercel cron batches. Each batch crawls up to six sources with bounded concurrency and persists normalized offers plus source coverage in Neon PostgreSQL. Missing batches receive a separate recovery attempt at 05:00 UTC; the finalizer retries at 07:00 UTC and only publishes a consolidated run when every expected batch exists.
 
 Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, Browserless REST rendering/unblocking and finally remote Playwright for difficult rendered or interactive pages. No local Chromium or browser binaries are bundled; `playwright-core` is only the remote-control client.
 
 ## Deal quality gates
 
 - Only eligible men's long outdoor trousers enter the shortlist; ski, winter, rain, zip-off, shorts and tights are rejected.
-- Missing optional data does not suppress an otherwise strong deal. Explicit incompatible evidence remains a hard exclusion.
+- A confirmed deal requires a reference price tied to the same variant, known shipping to Germany and a confirmed purchasable target size. Uncertain products remain review candidates.
 - Offers with the same merchant and canonical product URL are collapsed.
-- Listing cards are discovery evidence; live size availability is only confirmed from explicit variant data.
+- Listing cards are discovery evidence; live size availability is only confirmed from explicit available variant data. A generic list of size labels is never sufficient.
+- Market-price scoring is disabled until comparable product evidence is available. A neutral market score is never invented.
 - Deal classification and scoring are deterministic TypeScript rules, not LLM decisions.
+
+The home page shows confirmed deals, review candidates, source quality and a browser-local watchlist. Historic prices are shown when the same offer was saved in more than one finalized run. A single consolidated email after a complete run can be enabled with `RESEND_API_KEY`, `DEAL_NOTIFY_FROM` and `DEAL_NOTIFY_TO`; without these settings, no email is sent. The provider request and database state are keyed by run date to avoid duplicate notifications.
 
 ## Build and CI
 
@@ -59,6 +62,10 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - `pnpm smoke:browser` runs a read-only five-shop crawl with a locally supplied Browserless token and reports each shop's coverage without touching Neon.
 - Batch writes are idempotent per date/index.
 - Finalization is idempotent per run date and refuses to publish incomplete runs.
+- Source coverage distinguishes discovered product cards, usable priced candidates, verified reference prices, confirmed sizes and qualifying deals.
+- Each source also stores a compact diagnostic code (for example parser empty, missing reference price or unverified size) for human review and future parser assistance; no model decides whether to publish a deal.
+- Sitemap links are restricted to the shop domain and HTML crawling respects robots.txt.
+- Mammut men's hiking-trouser category uses a targeted HTML parser. Its server-rendered product cards are extracted without requiring Browserless; a repeated screen-reader price is read once and does not become an MSRP.
 - `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials.
 - Read-only status endpoints use short CDN caching where appropriate.
 
@@ -78,3 +85,17 @@ Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The d
 ## Optional integrations
 
 Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the remote browser layer; the application bundles only `playwright-core`, never a local browser binary.
+
+## LLM extraction pilot
+
+An optional OpenAI extraction fallback can inspect a bounded set of product-card text snippets only after Browserless has returned page content and the deterministic parsers found no offers. It cannot resolve blocked requests and does not run on feeds or successful parsers. The pilot is disabled unless `LLM_EXTRACTION_MODE` is set.
+
+- Set `LLM_EXTRACTION_MODE=shadow` to record evidence-validated candidate offers without passing them into normalization or deal selection.
+- The initial shop allowlist defaults to `mammut-eu`; change it with `LLM_EXTRACTION_SHOPS` (comma-separated shop IDs).
+- Set `OPENAI_API_KEY` in the server environment. The default model is `gpt-5.6-luna`; override with `LLM_EXTRACTION_MODEL`.
+- The request is capped at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. Browser fallback can attempt at most once per URL.
+- Shadow results appear as compact `llm-extraction-pilot` runtime log entries. Raw page HTML and evidence text are not logged.
+- Every accepted name, URL and current price must match supplied page evidence. A reference price is retained only when explicitly labeled in the evidence. Size and availability remain unknown; the LLM cannot confirm them.
+- After reviewing shadow results, `LLM_EXTRACTION_MODE=active` may be enabled for the allowlisted shop. Even then, the existing normalizer and deterministic deal rules remain the publication gate.
+
+Do not enable active mode until shadow results have been checked against the product pages. The pilot intentionally uses no LLM result to make a size or stock claim.

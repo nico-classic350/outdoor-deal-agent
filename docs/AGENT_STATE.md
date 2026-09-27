@@ -17,7 +17,7 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - 91 registered shops
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
-- finalizer publishes `agent_runs` only after all batches are present
+- 16 recovery crons at 05:00 UTC rerun missing batches; retry finalizer at 07:00 UTC publishes `agent_runs` only after all batches are present
 - `/api/health` is the production health and deployment-SHA source
 - `/api/probe` replays current filtering/scoring against the latest complete stored batch snapshot without crawling shops
 
@@ -28,7 +28,9 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - explicit incompatible evidence excludes; missing optional evidence does not
 - target size W33/L32, W34/L32 acceptable; never > L32
 - no rain/hardshell, winter/ski, zip-off, heavy alpine or loud designs
+- confirmed deals require verified same-variant reference price, known shipping and purchasable W33/W34 with L32 maximum; otherwise review candidate
 - deal qualification and scoring are deterministic TypeScript rules
+- Mammut men's category is targeted; product cards are discovery data and carry no invented UVP
 
 ## Acquisition order
 
@@ -42,6 +44,12 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 
 No local Chromium or full Playwright browser binaries are bundled.
 
+## Results and notification
+
+- `/` displays confirmed deals, review candidates, source evidence and browser-local saved items.
+- An optional consolidated email is sent once per complete run when `RESEND_API_KEY`, `DEAL_NOTIFY_FROM`, `DEAL_NOTIFY_TO` are set. No recipient address is hardcoded.
+- Price history on the page uses finalized offer snapshots from up to 30 recent runs.
+
 ## Browserless environment variables
 
 Never commit values. Supported names:
@@ -51,6 +59,15 @@ Never commit values. Supported names:
 - `BROWSERLESS_UNBLOCK=false` to disable unblock
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
+
+Optional bounded LLM extraction pilot (off unless enabled):
+
+- `OPENAI_API_KEY` (server-side only)
+- `LLM_EXTRACTION_MODE=shadow` to observe results without publishing them; `active` is opt-in after review
+- `LLM_EXTRACTION_SHOPS` (comma-separated; defaults to `mammut-eu`)
+- `LLM_EXTRACTION_MODEL` (defaults to `gpt-5.6-luna`)
+
+The pilot only runs after a rendered page was received and deterministic extraction returned no offers. It caps the request at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. It requires page evidence for extracted names and prices; listing pages never confirm size or availability. See the README's “LLM extraction pilot” section for its shadow-review and activation procedure.
 
 For a read-only five-shop Browserless smoke test, set the token in the local shell and run `pnpm smoke:browser`. The default shops are Hervis, Sport Bittl, Mammut EU, Odlo EU and Arc’teryx EU; pass shop IDs to select others. It prints coverage and offer counts and never writes to Neon. Browserless requests may consume account credits. HTTP and browser requests share the source deadline; coverage records each browser stage and its elapsed time.
 

@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { NormalizedOffer, RunReport } from './types';
+import { offerKey } from './product-rules.mjs';
 
 let initPromise: Promise<void> | null = null;
 
@@ -66,4 +67,21 @@ export async function latestRun() {
   } catch {
     return null;
   }
+}
+
+export async function recentPriceHistory():Promise<Record<string,{date:string,price:number}[]>>{
+  const sql=client(); if(!sql) return {};
+  try{
+    await ensureSchema();
+    const rows=await sql`SELECT run_key,deals,near_misses FROM agent_runs ORDER BY finished_at DESC LIMIT 30`;
+    const history:Record<string,{date:string,price:number}[]>={};
+    for(const row of [...rows].reverse()){
+      for(const offer of [...(Array.isArray(row.deals)?row.deals:[]),...(Array.isArray(row.near_misses)?row.near_misses:[])]){
+        if(!offer?.url||!Number.isFinite(Number(offer.effectiveCostEur))) continue;
+        const key=offerKey(offer);
+        (history[key]??=[]).push({date:String(row.run_key),price:Number(offer.effectiveCostEur)});
+      }
+    }
+    return history;
+  }catch{return {}}
 }

@@ -25,8 +25,11 @@ export type RawOffer = {
   currency?: string;
   price?: number;
   rrp?: number;
+  // The reference price must be tied to this offer/variant, never inferred from nearby prices.
+  rrpSource?: string;
   shipping?: number;
   returnCost?: number;
+  sizeAvailability?: 'available'|'unknown';
   availability?: string;
   description?: string;
 };
@@ -42,6 +45,8 @@ export type NormalizedOffer = RawOffer & {
   shippingEur: number;
   returnCostEur: number|null;
   effectiveCostEur: number;
+  shippingKnown: boolean;
+  rrpVerified: boolean;
   nominalDiscountPct: number;
   effectiveDiscountPct: number;
   sizeFit: 'confirmed'|'probable'|'unconfirmed'|'no';
@@ -58,6 +63,12 @@ export type SourceCoverage = {
   status: SourceStatus;
   discoveredUrls: number;
   parsedOffers: number;
+  eligibleOffers?: number;
+  pricedOffers?: number;
+  verifiedReferenceOffers?: number;
+  availableSizeOffers?: number;
+  qualifiedOffers?: number;
+  diagnosticCode?: 'blocked'|'parser-empty'|'no-relevant-products'|'no-reference-price'|'size-unverified'|'no-qualified-deal';
   elapsedMs: number;
   note?: string;
   technicalPath?: string[];

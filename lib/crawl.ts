@@ -6,19 +6,50 @@ import { browserExtract, browserFallbackConfigured, browserFallbackMode } from '
 import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
+import robotsParser from 'robots-parser';
 
-const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/0.1; +https://example.invalid/bot)';
+const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
+const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
 const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
 
-async function get(url:string, ms=10000, deadline=Infinity){
-  if (Date.now() >= deadline) throw new Error('source-budget-exhausted');
-  return fetch(url,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},redirect:'follow',signal:AbortSignal.timeout(Math.max(1,Math.min(ms,deadline-Date.now())))});
+async function get(url:string, source:ShopSource, ms=10000, deadline=Infinity){
+  let current=url;
+  for(let redirects=0;redirects<4;redirects++){
+    if(!safeShopUrl(source,current)) throw new Error('shop-domain-mismatch');
+    if(Date.now() >= deadline) throw new Error('source-budget-exhausted');
+    const response=await fetch(current,{headers:{'user-agent':UA,'accept-language':'de-DE,de;q=0.9,en;q=0.5'},
+      redirect:'manual',signal:AbortSignal.timeout(Math.max(1,Math.min(ms,deadline-Date.now())))});
+    if(response.status>=300&&response.status<400&&response.headers.get('location')){
+      current=new URL(response.headers.get('location')!,current).toString();continue;
+    }
+    return response;
+  }
+  throw new Error('too-many-shop-redirects');
 }
 function absolute(base:string,u:string){try{return new URL(u,base).toString()}catch{return ''}}
+function safeShopUrl(source:ShopSource, url:string){
+  try{
+    const u=new URL(url), base=new URL(source.baseUrl);
+    return u.protocol==='https:' && (u.hostname===base.hostname || u.hostname===base.hostname.replace(/^www\./,''));
+  }catch{return false}
+}
+async function allowedByRobots(source:ShopSource,url:string,deadline:number){
+  if(!safeShopUrl(source,url)) return false;
+  const origin=new URL(source.baseUrl).origin;
+  if(!robotsCache.has(origin)) robotsCache.set(origin,(async()=>{
+    try{
+      const robotsUrl=new URL('/robots.txt',origin).toString();
+      const response=await get(robotsUrl,source,2500,deadline);
+      return response.ok?robotsParser(robotsUrl,await response.text()):null;
+    }catch{return null}
+  })());
+  const rules=await robotsCache.get(origin)!;
+  return rules?.isAllowed(url,'OutdoorDealAgent')!==false;
+}
 
 async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise<string[]> {
   const candidates = source.sitemapHints?.length ? source.sitemapHints.map(x=>absolute(source.baseUrl,x)) : [absolute(source.baseUrl,'/sitemap.xml'),absolute(source.baseUrl,'/sitemap_index.xml')];
@@ -26,15 +57,16 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
   for(const sm of candidates){
     if(Date.now() >= deadline) break;
     try{
-      const r=await get(sm,8000,deadline); if(!r.ok) continue; const xml=await r.text();
+      const r=await get(sm,source,8000,deadline); if(!r.ok) continue; const xml=await r.text();
       const locs=[...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&'));
-      const nested=locs.filter(x=>/sitemap/i.test(x)).slice(0,6);
+      const nested=locs.filter(x=>/sitemap/i.test(x)&&safeShopUrl(source,x)).slice(0,6);
       if(nested.length){
-        for(const n of nested){ if(Date.now() >= deadline) break; try{const rr=await get(n,6000,deadline); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
+        for(const n of nested){ if(Date.now() >= deadline) break; try{const rr=await get(n,source,6000,deadline); if(!rr.ok) continue; const xx=await rr.text(); urls.push(...[...xx.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replace(/&amp;/g,'&')))}catch{} }
       } else urls.push(...locs);
     }catch{}
   }
   const filtered=urls.filter(u=>{
+    if(!safeShopUrl(source,u)) return false;
     const s=u.toLowerCase(); return BRAND_TERMS.some(b=>s.includes(b.replace(/[^a-z0-9]/g,''))||s.includes(b)) || /(herren|men|pants|hose|hosen|trousers|outdoor|trekking|wandern|sale|outlet)/.test(s);
   });
   return [...new Set(filtered)].slice(0,120);
@@ -52,8 +84,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   });
   const browserFallback = async (urls:string[], blocked=false) => {
     technicalPath.push('browser-fallback',`browser-mode-${browserFallbackMode()}`);
-    for(const url of [...new Set(urls)].slice(0,BROWSER_FALLBACK_URL_LIMIT)){
+    const before=offers.length;
+    for(const url of [...new Set(urls)].filter(url=>safeShopUrl(source,url)).slice(0,BROWSER_FALLBACK_URL_LIMIT)){
       if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
+      if(!await allowedByRobots(source,url,deadline)){technicalPath.push('robots-denied');continue}
       const result=await browserExtract(source,url,{blocked,deadline});
       if(result.httpStatus) httpStatuses.push(result.httpStatus);
       if(result.mode!=='none') technicalPath.push(`browser-${result.mode}`);
@@ -65,20 +99,22 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       } else {
         technicalPath.push('browser-empty');
       }
-      if(offers.length) break;
+      if(offers.length>before) break;
     }
-    return offers.length>0;
+    return offers.length>before;
   };
 
   try{
     if(source.id==='globetrotter'){
       technicalPath.push('official-affiliate-feed');
       try{
-        const feedOffers=await ingestGlobetrotterOfficialFeed(source);
+        const feedOffers=await ingestGlobetrotterOfficialFeed(source,deadline);
         offers.push(...feedOffers);
         discovered=['official-product-feed'];
         technicalPath.push('official-affiliate-feed-success');
-        return {offers,coverage:coverage('success','Official Globetrotter product data feed')};
+        // This feed has no UVP. Keep its products for coverage, and continue
+        // discovering sources that can supply a real reference price.
+        technicalPath.push('official-feed-no-reference-price');
       }catch(e:any){
         technicalPath.push('official-affiliate-feed-failed');
       }
@@ -86,7 +122,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
 
     technicalPath.push('awin-check');
     try{
-      const awin=await ingestAwinProductFeed(source);
+      const awin=await ingestAwinProductFeed(source,deadline);
       if(awin.configured){
         technicalPath.push('awin-product-feed');
         if(awin.offers.length){
@@ -109,9 +145,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       discovered=targeted;
       for(const url of targeted){
         if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
+        if(!await allowedByRobots(source,url,deadline)){technicalPath.push('robots-denied');continue}
         try{
           technicalPath.push('listing-http-fetch');
-          const r=await get(url,7000,deadline); httpStatuses.push(r.status);
+          const r=await get(url,source,7000,deadline); httpStatuses.push(r.status);
           if(!r.ok) continue;
           const html=await r.text();
           const x=extractTargetedListing(html,source,url);
@@ -119,9 +156,9 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           offers.push(...x);
         }catch{ technicalPath.push('listing-http-error'); }
       }
-      const unique=[...new Map(offers.map(o=>[o.url.toLowerCase(),o])).values()];
+      const unique=[...new Map(offers.map(o=>[`${o.url.toLowerCase()}|${o.sizes.join('/')}|${o.price}|${o.rrp||''}`,o])).values()];
       offers.splice(0,offers.length,...unique);
-      if(offers.length){
+      if(offers.some(o=>o.rrpSource)){
         return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
       }
       technicalPath.push('targeted-listings-empty','generic-fallback');
@@ -148,9 +185,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
 
     for(const url of discovered.slice(0,GENERIC_URL_LIMIT)){
       if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
+      if(!await allowedByRobots(source,url,deadline)){technicalPath.push('robots-denied');continue}
       try{
         technicalPath.push('http-fetch');
-        const r=await get(url,7000,deadline);
+        const r=await get(url,source,7000,deadline);
         httpStatuses.push(r.status);
         if(r.status===403||r.status===429){
           technicalPath.push(`http-${r.status}`);
@@ -190,14 +228,16 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('http-error');
       }
     }
-    if(!offers.length){
+    if(!offers.some(o=>o.rrpSource)){
+      if(technicalPath.includes('robots-denied') && !httpStatuses.length)
+        return {offers,coverage:coverage('blocked','Robots rules disallow these product pages')};
       if(!browserFallbackConfigured()){
         technicalPath.push('browser-fallback-disabled');
-        return {offers,coverage:coverage('failed','No parseable data; Browserless token not configured')};
+        return {offers,coverage:coverage(offers.length?'partial':'failed',offers.length?'Products parsed, but no verified reference price':'No parseable data; Browserless token not configured')};
       }
-      const candidates=discovered.length ? discovered : [source.baseUrl];
+      const candidates=discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl];
       const succeeded=await browserFallback(candidates,false);
-      return {offers,coverage:coverage(succeeded?'browser':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':'No parseable data after Browserless fallback')};
+      return {offers,coverage:coverage(succeeded?'browser':offers.length?'partial':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':offers.length?'Products parsed, but no verified reference price':'No parseable data after Browserless fallback')};
     }
     const status = discovered.length>1?'success':'partial';
     return {offers,coverage:coverage(status,'Direct crawl produced parseable product data')};

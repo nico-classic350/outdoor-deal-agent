@@ -97,8 +97,8 @@ const result = {
     finalizedToday: health?.body?.finalizedToday,
   },
   probe: {
-    snapshotDate: probe?.body?.snapshotDate,
-    elapsedMs: probe?.body?.probe?.elapsedMs,
+    snapshotDate: probe?.body?.runDate,
+    elapsedMs: probe?.body?.elapsedMs,
     deals: Array.isArray(probe?.body?.deals) ? probe.body.deals.length : null,
     nearMisses: Array.isArray(probe?.body?.nearMisses) ? probe.body.nearMisses.length : null,
   },
