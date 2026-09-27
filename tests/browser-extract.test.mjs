@@ -72,16 +72,41 @@ test('provider 429 stops further Browserless escalation for this shop', async ()
   const requests = [];
   globalThis.fetch = async url => {
     requests.push(new URL(url).pathname);
-    return { ok: false, status: 429 };
+    return { ok: false, status: 429, headers: { get: () => null } };
   };
   try {
     const blocked = await browserExtract(shop, shop.baseUrl, { blocked: true, deadline: Date.now() + 5000 });
     const empty = await browserExtract(shop, shop.baseUrl, { deadline: Date.now() + 5000 });
-    assert.deepEqual(requests, ['/unblock', '/content']);
+    assert.deepEqual(requests, ['/unblock', '/unblock', '/content', '/content']);
     assert.equal(blocked.httpStatus, 429);
     assert.equal(empty.httpStatus, 429);
     assert.ok(blocked.steps.includes('provider-rate-limited'));
     assert.ok(empty.steps.includes('provider-rate-limited'));
+    assert.ok(blocked.steps.includes('provider-retry'));
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.BROWSERLESS_API_TOKEN;
+    else process.env.BROWSERLESS_API_TOKEN = previousToken;
+  }
+});
+
+test('one transient provider 429 can recover without starting Playwright', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousToken = process.env.BROWSERLESS_API_TOKEN;
+  process.env.BROWSERLESS_API_TOKEN = 'test-token';
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return requests === 1
+      ? { ok: false, status: 429, headers: { get: () => '0.1' } }
+      : { ok: true, status: 200, text: async () => '<script type="application/ld+json">{"@type":"Product","name":"Odlo Hiking Pants","offers":{"price":99,"priceCurrency":"EUR"}}</script>' };
+  };
+  try {
+    const result = await browserExtract(shop, shop.baseUrl, { deadline: Date.now() + 6000 });
+    assert.equal(requests, 2);
+    assert.equal(result.offers.length, 1);
+    assert.ok(result.steps.includes('provider-retry'));
+    assert.ok(!result.steps.includes('provider-rate-limited'));
   } finally {
     globalThis.fetch = previousFetch;
     if (previousToken === undefined) delete process.env.BROWSERLESS_API_TOKEN;

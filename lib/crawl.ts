@@ -7,6 +7,7 @@ import { targetedListingUrls, extractTargetedListing } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
 import { llmExtractFromHtml } from './llm-extract';
+import { productEligible } from './product-rules.mjs';
 import robotsParser from 'robots-parser';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
@@ -174,8 +175,11 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       // Listing badges are useful price evidence but listings do not prove a
       // purchasable size. Validate a bounded number of strong discounts on the
       // product page and attach the badge only to the exact matching price.
-      const discounted=offers.filter(o=>o.discountSource&&Number(o.observedDiscountPct)>=40)
-        .sort((a,b)=>Number(b.observedDiscountPct)-Number(a.observedDiscountPct)).slice(0,4);
+      // Listings do not establish that size L is actually buyable. Inspect a
+      // bounded, broader set of eligible detail pages rather than assuming a
+      // listing card's generic size labels apply to its discounted variant.
+      const discounted=offers.filter(o=>productEligible(o.name,o.description) && o.discountSource&&Number(o.observedDiscountPct)>=40)
+        .sort((a,b)=>Number(b.observedDiscountPct)-Number(a.observedDiscountPct)).slice(0,8);
       const detailOffers:RawOffer[]=[];
       for(const candidate of discounted){
         if(!budgetRemaining()) {technicalPath.push('source-budget-exhausted');break;}
