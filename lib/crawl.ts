@@ -261,7 +261,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           // One bounded observation per shop; direct HTML is available even when Browserless is throttled.
           // Never promote these candidates into the crawl until their evidence has been reviewed.
           const extraction=await llmExtractFromHtml(source,url,html,{
-            mode:'shadow',shops:[...LLM_DIRECT_SHADOW_SHOPS],timeoutMs:Math.min(6000,deadline-Date.now()-1000),
+            mode:'shadow',shops:[...LLM_DIRECT_SHADOW_SHOPS],timeoutMs:Math.min(9000,deadline-Date.now()-1000),
           });
           technicalPath.push(`llm-direct-shadow-${extraction.outcome}-candidates-${extraction.candidateCount}-offers-${extraction.observedOffers.length}`);
           if(extraction.httpStatus) technicalPath.push(`llm-direct-http-${extraction.httpStatus}`);

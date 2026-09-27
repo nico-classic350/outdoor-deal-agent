@@ -271,7 +271,8 @@ export async function llmExtractFromHtml(
     const offers = offersFromOutput(parsed, candidates, source, pageUrl);
     if (!offers) return result(started, { offers: [], observedOffers: [], attempted: true, outcome: 'invalid-output', mode, candidateCount: candidates.length });
     return result(started, { offers: mode === 'active' ? offers : [], observedOffers: offers, attempted: true, outcome: 'success', mode, candidateCount: candidates.length });
-  } catch {
-    return result(started, { offers: [], observedOffers: [], attempted: true, outcome: 'api-error', mode, candidateCount: candidates.length });
+  } catch (error) {
+    const apiErrorCode = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError') ? 'timeout' : undefined;
+    return result(started, { offers: [], observedOffers: [], attempted: true, outcome: 'api-error', mode, candidateCount: candidates.length, apiErrorCode });
   }
 }

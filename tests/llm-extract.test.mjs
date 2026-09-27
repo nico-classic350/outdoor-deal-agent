@@ -101,6 +101,14 @@ test('API failure records only bounded status and error code', async () => {
   assert.equal(JSON.stringify(result).includes('secret data'),false);
 });
 
+test('a timed-out LLM request is identified without logging its input', async () => {
+  const result=await llmExtractFromHtml(shop,pageUrl,html,{mode:'shadow',shops:['mammut-eu'],apiKey:'test-key',
+    fetcher:async()=>{ const error=new Error('sensitive request details'); error.name='TimeoutError'; throw error; }});
+  assert.equal(result.outcome,'api-error');
+  assert.equal(result.apiErrorCode,'timeout');
+  assert.equal(JSON.stringify(result).includes('sensitive request details'),false);
+});
+
 test('browser fallback runs the allowlisted LLM in shadow mode without publishing its offers', async () => {
   const keys = ['BROWSERLESS_API_TOKEN', 'BROWSERLESS_PLAYWRIGHT', 'LLM_EXTRACTION_MODE', 'LLM_EXTRACTION_SHOPS', 'OPENAI_API_KEY'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
