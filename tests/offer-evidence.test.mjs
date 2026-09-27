@@ -19,6 +19,16 @@ test('Mammut product card is discovered without doubling screen reader price',()
   assert.equal(offers[0].brand,'Mammut');
 });
 
+test('Stoic listing discovers the brand and records only an explicit discount badge',()=>{
+  const html=`<article class="product-card"><a href="/stoic-hoforsst-softshell-pants-light/">Stoic Hoforsst Softshell Pants Light</a>
+    <span class="discount-badge">−60%</span><span class="price">67,98 €</span></article>`;
+  const offers=extractTargetedListing(html,{id:'bergfreunde',name:'Bergfreunde',country:'DE'},'https://www.bergfreunde.de/outlet/');
+  assert.equal(offers.length,1);
+  assert.equal(offers[0].brand,'Stoic');
+  assert.equal(offers[0].observedDiscountPct,60);
+  assert.equal(offers[0].rrp,undefined);
+});
+
 test('two incidental prices do not establish a reference price',()=>{
   const source={id:'test',name:'Test',country:'DE'};
   const html='<article><a href="/pants">Herren Trekkinghose</a><span>59,00 €</span><span>129,00 €</span></article>';
@@ -35,6 +45,16 @@ test('JSON-LD does not transfer a model-level reference across variants',()=>{
   assert.equal(offers.length,2);
   assert.equal(offers[0].rrp,undefined);
   assert.equal(offers[1].rrp,120);
+});
+
+test('variant-specific L in stock and an explicit merchant discount are extracted',()=>{
+  const product={'@type':'Product',name:'Hoforsst Softshell Pants Light',brand:'Stoic',
+    offers:{'@type':'Offer',price:67.98,priceCurrency:'EUR',size:'L Regular',availability:'https://schema.org/InStock'}};
+  const html=`<span class="discount-badge">−60%</span><script type="application/ld+json">${JSON.stringify(product)}</script>`;
+  const offer=extractJsonLd(html,{id:'bergfreunde',name:'Bergfreunde',country:'DE'},'https://www.bergfreunde.de/pants')[0];
+  assert.equal(offer.sizeAvailability,'available');
+  assert.equal(offer.observedDiscountPct,60);
+  assert.equal(offer.rrp,undefined);
 });
 
 test('Awin preserves each variant price and RRP as one observation',async()=>{
@@ -63,4 +83,13 @@ test('unverified size and unknown shipping cannot become a confirmed deal',async
   assert.equal(confirmed.sizeFit,'confirmed');assert.equal(confirmed.rrpVerified,true);
   assert.equal(await normalizeOffer({...base,color:'white',shipping:0,sizeAvailability:'available'}),null);
   assert.equal(await normalizeOffer({...base,brand:undefined,name:'Grab Pants Men',shipping:0,sizeAvailability:'available'}),null);
+});
+
+test('available L variant can qualify using displayed discount with no RRP',async()=>{
+  const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',url:'https://www.bergfreunde.de/pants',
+    brand:'Stoic',name:'Hoforsst Softshell Pants Light',currency:'EUR',price:67.98,shipping:0,sizes:['L Regular'],
+    sizeAvailability:'available',observedDiscountPct:60,discountSource:'merchant:displayed-discount'});
+  assert.equal(offer?.sizeFit,'confirmed');
+  assert.equal(offer?.discountVerified,true);
+  assert.equal(offer?.rrp,null);
 });

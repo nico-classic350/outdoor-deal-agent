@@ -1,5 +1,5 @@
 export const PROFILE = {
-  brands: ["Arc'teryx","Odlo","Dynafit","Ortovox","La Sportiva","Mammut","Norrøna","Rab","Patagonia","Haglöfs","Black Diamond","Peak Performance","Houdini","Adidas Terrex","66°North","Goldwin","Tilak"],
+  brands: ["Arc'teryx","Odlo","Dynafit","Ortovox","La Sportiva","Mammut","Norrøna","Rab","Patagonia","Haglöfs","Black Diamond","Peak Performance","Houdini","Adidas Terrex","66°North","Goldwin","Tilak","Stoic"],
   excludedBrands: ['The North Face'],
   waist: [33,34],
   inseamMax: 32,

@@ -17,7 +17,11 @@ function brandOf(o:RawOffer){
   })||'';
 }
 export async function normalizeOffer(o:RawOffer):Promise<NormalizedOffer|null>{
-  const brand=brandOf(o); if(!brand || !o.name || !o.currency || !o.price || !o.rrp || o.rrp<=o.price) return null;
+  const brand=brandOf(o); if(!brand || !o.name || !o.currency || !o.price) return null;
+  const rrp=o.rrp && o.rrp>o.price && o.rrpSource ? o.rrp : undefined;
+  const rrpVerified=Boolean(rrp&&o.rrpSource);
+  const discountVerified=Boolean(o.discountSource && Number.isFinite(o.observedDiscountPct) && o.observedDiscountPct!>=40);
+  if(!rrpVerified&&!discountVerified) return null;
   if (!productEligible(o.name,o.description)) return null;
   if (/out.of.stock|sold.out|ausverkauft|nicht.verfügbar/i.test(o.availability || '')) return null;
   const color=(o.color||'').toLowerCase();
@@ -26,16 +30,15 @@ export async function normalizeOffer(o:RawOffer):Promise<NormalizedOffer|null>{
   const colorBonus=/navy|dark blue|light blue|blue|black|schwarz|blau|grey|gray|grau/i.test(color)?5:0;
   const fit=Math.min(100,productFitScore(text)+colorBonus); if(fit<45) return null;
   const sizeFit=inferSizeFit(o.sizes); if(sizeFit==='no') return null;
-  const priceEur=await eurValue(o.price,o.currency), rrpEur=await eurValue(o.rrp,o.currency);
+  const priceEur=await eurValue(o.price,o.currency), rrpEur=rrp?await eurValue(rrp,o.currency):null;
   const shippingKnown=o.shipping!=null;
   const shippingEur=shippingKnown?await eurValue(o.shipping!,o.currency):0;
   const returnCostEur=o.returnCost==null?null:await eurValue(o.returnCost,o.currency);
   const effectiveCostEur=priceEur+shippingEur+(returnCostEur||0);
-  const nominalDiscountPct=(1-priceEur/rrpEur)*100;
-  const effectiveDiscountPct=(1-effectiveCostEur/rrpEur)*100;
-  const rrpVerified=Boolean(o.rrpSource);
+  const nominalDiscountPct=rrpEur ? (1-priceEur/rrpEur)*100 : Number(o.observedDiscountPct);
+  const effectiveDiscountPct=rrpEur ? (1-effectiveCostEur/rrpEur)*100 : Number(o.observedDiscountPct);
   const trustedSizeFit=o.sizeAvailability==='available'?sizeFit:sizeFit==='confirmed'?'unconfirmed':sizeFit;
-  const base={...o,brand,name:o.name,currency:o.currency,price:o.price,rrp:o.rrp,priceEur,rrpEur,shippingEur,shippingKnown,rrpVerified,returnCostEur,effectiveCostEur,nominalDiscountPct,effectiveDiscountPct,sizeFit:trustedSizeFit,productFitScore:fit};
+  const base={...o,brand,name:o.name,currency:o.currency,price:o.price,rrp:rrp??null,priceEur,rrpEur,shippingEur,shippingKnown,rrpVerified,discountVerified,returnCostEur,effectiveCostEur,nominalDiscountPct,effectiveDiscountPct,sizeFit:trustedSizeFit,productFitScore:fit};
   const score=dealScore(base as any), klass=dealClass(effectiveDiscountPct,trustedSizeFit,fit);
   return {...base,score,class:klass};
 }

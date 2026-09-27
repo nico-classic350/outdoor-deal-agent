@@ -158,7 +158,33 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       }
       const unique=[...new Map(offers.map(o=>[`${o.url.toLowerCase()}|${o.sizes.join('/')}|${o.price}|${o.rrp||''}`,o])).values()];
       offers.splice(0,offers.length,...unique);
-      if(offers.some(o=>o.rrpSource)){
+      // Listing badges are useful price evidence but listings do not prove a
+      // purchasable size. Validate a bounded number of strong discounts on the
+      // product page and attach the badge only to the exact matching price.
+      const discounted=offers.filter(o=>o.discountSource&&Number(o.observedDiscountPct)>=40)
+        .sort((a,b)=>Number(b.observedDiscountPct)-Number(a.observedDiscountPct)).slice(0,4);
+      const detailOffers:RawOffer[]=[];
+      for(const candidate of discounted){
+        if(!budgetRemaining()) {technicalPath.push('source-budget-exhausted');break;}
+        if(!await allowedByRobots(source,candidate.url,deadline)){technicalPath.push('robots-denied');continue;}
+        try{
+          technicalPath.push('discount-product-detail-fetch');
+          const response=await get(candidate.url,source,7000,deadline);httpStatuses.push(response.status);
+          if(!response.ok) continue;
+          const html=await response.text();
+          const parsed=extractJsonLd(html,source,candidate.url);
+          const variants=parsed.length?parsed:extractHtmlFallback(html,source,candidate.url);
+          const samePrice=variants.filter(v=>Math.abs(Number(v.price)-Number(candidate.price))<0.011);
+          detailOffers.push(...samePrice.map(v=>v.rrpSource?v:{...v,
+            observedDiscountPct:candidate.observedDiscountPct,discountSource:'merchant:displayed-discount'}));
+          if(samePrice.length) technicalPath.push('discount-detail-variant-validated');
+        }catch{technicalPath.push('discount-product-detail-error');}
+      }
+      if(detailOffers.length){
+        const detailedUrls=new Set(detailOffers.map(o=>o.url.toLowerCase()));
+        offers.splice(0,offers.length,...offers.filter(o=>!detailedUrls.has(o.url.toLowerCase())),...detailOffers);
+      }
+      if(offers.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))){
         return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
       }
       technicalPath.push('targeted-listings-empty','generic-fallback');
@@ -228,7 +254,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('http-error');
       }
     }
-    if(!offers.some(o=>o.rrpSource)){
+    if(!offers.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))){
       if(technicalPath.includes('robots-denied') && !httpStatuses.length)
         return {offers,coverage:coverage('blocked','Robots rules disallow these product pages')};
       if(!browserFallbackConfigured()){

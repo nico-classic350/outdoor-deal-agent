@@ -8,7 +8,7 @@ const BRAND_SLUG: Record<string,string> = {
   "La Sportiva":"la-sportiva","Mammut":"mammut","Norrøna":"norrona","Rab":"rab",
   "Patagonia":"patagonia","Haglöfs":"hagloefs","Black Diamond":"black-diamond",
   "Peak Performance":"peak-performance","Houdini":"houdini","Adidas Terrex":"adidas-terrex",
-  "66°North":"66-north","Goldwin":"goldwin","Tilak":"tilak"
+  "66°North":"66-north","Goldwin":"goldwin","Tilak":"tilak","Stoic":"stoic"
 };
 
 export function targetedListingUrls(source: ShopSource): string[] {
@@ -63,6 +63,16 @@ function parseEuroText(v:any):number|undefined{
   if(!m) return undefined;
   const n=Number(m[1].replace('.','').replace(',','.'));
   return Number.isFinite(n)?n:undefined;
+}
+function displayedDiscount($:any,card:any){
+  const labels=card.find('[data-testid*="discount" i],[data-testid*="badge" i],[class*="discount" i],[class*="rabatt" i],[class*="percent" i],[class*="badge" i],[class*="sale-badge" i],[data-e2e-test*="discount" i]')
+    .map((_:number,node:any)=>clean($(node).text())).get();
+  for(const label of labels){
+    const match=label.match(/(?:−|-|–)?\s*(\d{1,2})\s*%/);
+    const pct=match?Number(match[1]):0;
+    if(pct>=40&&pct<100) return pct;
+  }
+  return undefined;
 }
 
 function extractBalancedJsonArray(html:string, marker:string):any[] {
@@ -167,6 +177,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     const prices=moneyValues(blob);
     if(!prices.length) return;
     const price=Math.min(...prices);
+    const discount=displayedDiscount($,card);
     // Listing text often repeats the price and includes neighboring variants.
     // A highest number from the card is not a verified reference price.
 
@@ -190,6 +201,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
       sourceId:source.id, merchant:source.name, merchantCountry:source.country,
       url:href, imageUrl:imageUrl?abs(pageUrl,imageUrl):undefined,
       brand, name, sizes, currency:'EUR', price,
+      observedDiscountPct:discount,discountSource:discount?'merchant:displayed-discount':undefined,
       availability:/ausverkauft|nicht verfügbar|sold out/i.test(blob)?'out_of_stock':'unknown',
       description:blob.slice(0,500)
     });

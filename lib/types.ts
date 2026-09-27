@@ -27,6 +27,8 @@ export type RawOffer = {
   rrp?: number;
   // The reference price must be tied to this offer/variant, never inferred from nearby prices.
   rrpSource?: string;
+  observedDiscountPct?: number;
+  discountSource?: string;
   shipping?: number;
   returnCost?: number;
   sizeAvailability?: 'available'|'unknown';
@@ -39,14 +41,15 @@ export type NormalizedOffer = RawOffer & {
   name: string;
   currency: string;
   price: number;
-  rrp: number;
+  rrp: number|null;
   priceEur: number;
-  rrpEur: number;
+  rrpEur: number|null;
   shippingEur: number;
   returnCostEur: number|null;
   effectiveCostEur: number;
   shippingKnown: boolean;
   rrpVerified: boolean;
+  discountVerified: boolean;
   nominalDiscountPct: number;
   effectiveDiscountPct: number;
   sizeFit: 'confirmed'|'probable'|'unconfirmed'|'no';

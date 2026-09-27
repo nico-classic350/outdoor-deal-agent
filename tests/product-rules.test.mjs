@@ -19,7 +19,8 @@ test('unknown size stays reviewable while explicit incompatible size is rejected
   assert.equal(sizeEvidence(['34/30']), 'confirmed');
   assert.equal(sizeEvidence(['33']), 'probable');
   assert.equal(sizeEvidence(['EU 50']), 'probable');
-  assert.equal(sizeEvidence(['L']), 'unconfirmed');
+  assert.equal(sizeEvidence(['L']), 'confirmed');
+  assert.equal(sizeEvidence(['L Regular']), 'confirmed');
   assert.equal(sizeEvidence([]), 'unconfirmed');
 
   assert.equal(sizeEvidence(['S']), 'no');
@@ -28,8 +29,8 @@ test('unknown size stays reviewable while explicit incompatible size is rejected
   assert.equal(sizeEvidence(['W33 L34']), 'no');
   assert.equal(sizeEvidence(['33/34']), 'no');
 
-  assert.equal(sizeEvidence(['S','L']), 'unconfirmed');
-  assert.equal(sizeEvidence(['W32 L32','L']), 'unconfirmed');
+  assert.equal(sizeEvidence(['S','L']), 'confirmed');
+  assert.equal(sizeEvidence(['W32 L32','L']), 'confirmed');
 });
 
 test('deal tier depends on discount and product fit, not whether size data is readable', () => {
@@ -80,4 +81,23 @@ test('a cheaper unverified variant does not hide a verified variant at the same 
   ]);
   assert.equal(deals.length,1);
   assert.equal(deals[0].effectiveCostEur,60);
+});
+
+test('merchant-displayed discount can qualify without inventing an RRP', () => {
+  const base={sourceId:'bergfreunde',brand:'Stoic',name:'Hoforsst Softshell Pants Light',url:'https://example.org/stoic-hose',
+    sizeFit:'confirmed',shippingKnown:true,rrpVerified:false,discountVerified:true,observedDiscountPct:60,
+    effectiveDiscountPct:60,effectiveCostEur:67.98,productFitScore:80,score:80};
+  const result=selectOffers([base]);
+  assert.equal(result.deals.length,1);
+  assert.equal(result.deals[0].class,'Top Deal');
+});
+
+test('health and coverage use the same publication re-screening', async () => {
+  const {screenForPublication}=await import('../lib/publication-safety.mjs');
+  const candidates=[{sourceId:'x',brand:'Mammut',name:'Herren Wanderhose',url:'https://example.org/p',
+    sizeFit:'confirmed',shippingKnown:true,rrpVerified:true,effectiveDiscountPct:60,effectiveCostEur:50,
+    productFitScore:85,score:80}];
+  const safe=screenForPublication(candidates,40);
+  assert.equal(safe.deals.length,1);
+  assert.equal(safe.qualifiedCount,safe.deals.length);
 });

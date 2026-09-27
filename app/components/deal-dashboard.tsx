@@ -20,19 +20,19 @@ function date(v:string){return new Intl.DateTimeFormat('de-DE',{dateStyle:'mediu
 function DealCard({offer,history,saved,toggle}:{offer:NormalizedOffer;history:History;saved:boolean;toggle:()=>void}){
   const points=history[key(offer)]||[];
   const earlier=points.length>1?points[0].price:null;
-  const secure=offer.rrpVerified&&offer.shippingKnown&&offer.sizeFit==='confirmed';
+  const secure=(offer.rrpVerified||offer.discountVerified)&&offer.shippingKnown&&offer.sizeFit==='confirmed';
   return <article className="deal-card">
     <div className="card-header"><div className="eyebrow">{offer.brand} · {offer.merchant}</div>
       <button className="save" type="button" onClick={toggle} aria-label={saved?'Aus Merkliste entfernen':'Auf Merkliste setzen'} aria-pressed={saved}>{saved?'★':'☆'}</button></div>
     <h3>{offer.name}</h3><p className="subline">{offer.color||'Farbe nicht angegeben'} · {offer.merchantCountry}</p>
     <div className="price-row"><strong>{euro(offer.effectiveCostEur)}</strong><span className="discount">−{Math.round(offer.effectiveDiscountPct)} %</span></div>
-    <p className="subline">{offer.shippingKnown?'Gesamtpreis inklusive bekannter Versandkosten':'Versandkosten noch ungeklärt'} · Referenzpreis {euro(offer.rrpEur)}</p>
+    <p className="subline">{offer.shippingKnown?'Gesamtpreis inklusive bekannter Versandkosten':'Versandkosten noch ungeklärt'} · Referenzpreis {offer.rrpEur==null?'nicht angegeben':euro(offer.rrpEur)}</p>
     <div className="badges"><span className={secure?'badge good':'badge warn'}>{offer.sizeFit==='confirmed'?'Größe kaufbar bestätigt':'Größe prüfen'}</span>
-      <span className={offer.rrpVerified?'badge good':'badge warn'}>{offer.rrpVerified?'Referenzpreis belegt':'UVP prüfen'}</span></div>
+      <span className={offer.rrpVerified||offer.discountVerified?'badge good':'badge warn'}>{offer.rrpVerified?'Referenzpreis belegt':offer.discountVerified?'Händler-Rabattangabe belegt':'UVP prüfen'}</span></div>
     {offer.reason?<p className="reason">{offer.reason}</p>:null}
     {earlier!==null?<p className="history">Preisverlauf: {euro(earlier)} → {euro(points[points.length-1].price)} in {points.length} Beobachtungen</p>:null}
     <details className="evidence"><summary>Wie wurde das Angebot geprüft?</summary><dl>
-      <dt>Referenzpreis</dt><dd>{offer.rrpVerified?`${euro(offer.rrpEur)} · ${offer.rrpSource||'Händlerangabe'}`:'Nicht belegt'}</dd>
+      <dt>Referenzpreis</dt><dd>{offer.rrpVerified&&offer.rrpEur!=null?`${euro(offer.rrpEur)} · ${offer.rrpSource||'Händlerangabe'}`:offer.discountVerified?`${Math.round(offer.observedDiscountPct||0)} % Händler-Rabatt · ${offer.discountSource}`:'Nicht belegt'}</dd>
       <dt>Versand</dt><dd>{offer.shippingKnown?euro(offer.shippingEur):'Nicht geklärt'}</dd>
       <dt>Größe</dt><dd>{offer.sizeFit==='confirmed'?`Kaufbar: ${(offer.sizes||[]).join(', ')||'Passende Variante'}`:'Nicht bestätigt'}</dd>
       <dt>Quelle</dt><dd>{offer.merchant}</dd>
