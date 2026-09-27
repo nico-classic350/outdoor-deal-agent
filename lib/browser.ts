@@ -2,6 +2,11 @@ import { RawOffer, ShopSource } from './types';
 import { extractHtmlFallback, extractJsonLd } from './extract';
 import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
+import pLimit from 'p-limit';
+
+// A batch runs several shops concurrently. Keep its Browserless sessions serial
+// so a single function invocation cannot consume several provider slots.
+const browserSessionLimit = pLimit(1);
 
 export type BrowserFallbackResult = {
   offers: RawOffer[];
@@ -81,11 +86,27 @@ function requireTime(deadline: number, cap: number): number {
 function playwrightErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   // Never expose a CDP URL: it contains the Browserless token.
+  if (/cannot find module|module not found|ERR_MODULE_NOT_FOUND/i.test(message)) return 'playwright-module-missing';
   if (/429|rate.limit|too many requests/i.test(message)) return 'playwright-provider-rate-limited';
   if (/401|403|unauthori[sz]ed|forbidden/i.test(message)) return 'playwright-provider-auth-error';
   if (/timeout|timed out/i.test(message)) return 'playwright-timeout';
   if (/ECONN|ENOTFOUND|EAI_AGAIN|websocket|socket|closed/i.test(message)) return 'playwright-connection-error';
   return 'playwright-error';
+}
+
+async function browserlessRequest(url: string, init: RequestInit, deadline: number) {
+  let retried = false;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(requireTime(deadline, 18000)) });
+    if (response.status !== 429 || attempt || timeLeft(deadline, 5000) < 3500) return { response, retried };
+    // One bounded retry for temporary provider saturation. Never retry a shop's
+    // 403, and never flood Browserless with repeated 429 requests.
+    const seconds = Number(response.headers.get('retry-after'));
+    const backoff = Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 2500) : 1200;
+    await response.body?.cancel().catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, backoff));
+    retried = true;
+  }
 }
 
 async function contentRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
@@ -94,7 +115,7 @@ async function contentRequest(source: ShopSource, url: string, deadline: number)
   if (!cfg.contentUrl) return { offers: [], mode: 'none', elapsedMs: 0, steps: ['content-disabled'] };
 
   try {
-    const response = await fetch(cfg.contentUrl, {
+    const { response, retried } = await browserlessRequest(cfg.contentUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'text/html' },
       body: JSON.stringify({
@@ -104,18 +125,17 @@ async function contentRequest(source: ShopSource, url: string, deadline: number)
         gotoOptions: { waitUntil: 'domcontentloaded', timeout: 12000 },
         rejectResourceTypes: ['image', 'media', 'font'],
       }),
-      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
-    });
+    }, deadline);
     if (!response.ok) {
       return {
         offers: [], mode: 'content', httpStatus: response.status,
-        elapsedMs: Date.now() - started, steps: [`content-http-${response.status}`],
+        elapsedMs: Date.now() - started, steps: [...(retried ? ['provider-retry'] : []), `content-http-${response.status}`],
       };
     }
     const html = await response.text();
     return {
       offers: parseRenderedHtml(source, url, html), mode: 'content', httpStatus: response.status, renderedHtml: html,
-      elapsedMs: Date.now() - started, steps: ['content-rendered'],
+      elapsedMs: Date.now() - started, steps: [...(retried ? ['provider-retry'] : []), 'content-rendered'],
     };
   } catch (error) {
     return { offers: [], mode: 'content', elapsedMs: Date.now() - started,
@@ -129,7 +149,7 @@ async function unblockContentRequest(source: ShopSource, url: string, deadline: 
   if (!cfg.unblockUrl || !cfg.useUnblock) return { offers: [], mode: 'none', elapsedMs: 0, steps: ['unblock-disabled'] };
 
   try {
-    const response = await fetch(cfg.unblockUrl, {
+    const { response, retried } = await browserlessRequest(cfg.unblockUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
@@ -139,19 +159,18 @@ async function unblockContentRequest(source: ShopSource, url: string, deadline: 
         screenshot: false,
         browserWSEndpoint: false,
       }),
-      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
-    });
+    }, deadline);
     if (!response.ok) {
       return {
         offers: [], mode: 'unblock', httpStatus: response.status,
-        elapsedMs: Date.now() - started, steps: [`unblock-content-http-${response.status}`],
+        elapsedMs: Date.now() - started, steps: [...(retried ? ['provider-retry'] : []), `unblock-content-http-${response.status}`],
       };
     }
     const payload = await response.json() as { content?: string | null };
     const html = payload?.content || '';
     return {
       offers: html ? parseRenderedHtml(source, url, html) : [], mode: 'unblock', httpStatus: response.status, renderedHtml: html || undefined,
-      elapsedMs: Date.now() - started, steps: ['unblock-content'],
+      elapsedMs: Date.now() - started, steps: [...(retried ? ['provider-retry'] : []), 'unblock-content'],
     };
   } catch (error) {
     return { offers: [], mode: 'unblock', elapsedMs: Date.now() - started,
@@ -167,7 +186,7 @@ async function unblockSessionRequest(url: string, deadline: number): Promise<Unb
   }
 
   try {
-    const response = await fetch(cfg.unblockUrl, {
+    const { response } = await browserlessRequest(cfg.unblockUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
@@ -178,8 +197,7 @@ async function unblockSessionRequest(url: string, deadline: number): Promise<Unb
         browserWSEndpoint: true,
         ttl: Math.min(30000, timeLeft(deadline, 30000)),
       }),
-      signal: AbortSignal.timeout(requireTime(deadline, 18000)),
-    });
+    }, deadline);
     if (!response.ok) return { endpoint: null, httpStatus: response.status, elapsedMs: Date.now() - started };
     const payload = await response.json() as { browserWSEndpoint?: string | null };
     return {
@@ -317,17 +335,22 @@ async function playwrightFromEndpoint(
   const started = Date.now();
   let browser: import('playwright-core').Browser | null = null;
   let page: import('playwright-core').Page | null = null;
+  let phase = 'module-load';
   try {
     const { chromium } = await import('playwright-core');
+    phase = 'cdp-connect';
     browser = await chromium.connectOverCDP(endpoint, { timeout: requireTime(options.deadline, 10000) });
+    phase = 'context';
     const context = browser.contexts()[0];
     if (!context) return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: [...options.steps, 'no-context'] };
     page = context.pages()[0] || await context.newPage();
     page.setDefaultTimeout(timeLeft(options.deadline, 2500));
+    phase = 'navigation';
     if (options.navigate || page.url() === 'about:blank') {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(options.deadline, 12000) });
     }
     requireTime(options.deadline, 2500);
+    phase = 'extraction';
     await stabilizeRenderedPage(page, options.deadline);
     requireTime(options.deadline, 2500);
     const html = await page.content();
@@ -343,8 +366,10 @@ async function playwrightFromEndpoint(
       steps: [...options.steps, offers.length ? 'playwright-extracted' : 'playwright-empty'],
     };
   } catch (error) {
+    const code = error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : playwrightErrorCode(error);
+    console.info(JSON.stringify({ event: 'playwright-attempt', sourceId: source.id, phase, code, elapsedMs: Date.now() - started }));
     return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started,
-      steps: [...options.steps, error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : playwrightErrorCode(error)] };
+      steps: [...options.steps, `playwright-phase-${phase}`, code] };
   } finally {
     try { if (page) await page.close(); } catch {}
     try { if (browser) await browser.close(); } catch {}
@@ -380,7 +405,7 @@ async function unblockedPlaywrightRequest(source: ShopSource, url: string, deadl
   return result;
 }
 
-export async function browserExtract(
+async function browserExtractOnce(
   source: ShopSource,
   url: string,
   options: { blocked?: boolean; deadline?: number } = {},
@@ -476,4 +501,12 @@ export async function browserExtract(
   const llmOffers = await tryLlmFallback();
   if (llmOffers.length) return done({ offers: llmOffers, mode: content.mode, httpStatus: content.httpStatus, steps: ['llm-pilot-active-offers'] });
   return done(content);
+}
+
+export async function browserExtract(
+  source: ShopSource,
+  url: string,
+  options: { blocked?: boolean; deadline?: number } = {},
+): Promise<BrowserFallbackResult> {
+  return browserSessionLimit(() => browserExtractOnce(source, url, options));
 }
