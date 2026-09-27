@@ -46,7 +46,7 @@ test('shadow mode reports evidence-validated offers but never passes them into t
     fetcher: async (_url, options) => { request = JSON.parse(options.body); return responseFor(validOffer); },
   });
 
-  assert.equal(request.model, 'gpt-5.6-luna');
+  assert.equal(request.model, 'gpt-6-luna');
   assert.equal(request.reasoning.effort, 'none');
   assert.equal(result.outcome, 'success');
   assert.equal(result.observedOffers.length, 1);
