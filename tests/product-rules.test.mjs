@@ -21,6 +21,7 @@ test('unknown size stays reviewable while explicit incompatible size is rejected
   assert.equal(sizeEvidence(['W33 L32']), 'confirmed');
   assert.equal(sizeEvidence(['34/30']), 'confirmed');
   assert.equal(sizeEvidence(['33']), 'probable');
+  assert.equal(sizeEvidence(['W33']), 'probable');
   assert.equal(sizeEvidence(['EU 50']), 'probable');
   assert.equal(sizeEvidence(['L']), 'confirmed');
   assert.equal(sizeEvidence(['L Regular']), 'confirmed');
