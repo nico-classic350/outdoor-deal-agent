@@ -5,7 +5,8 @@ import { PROFILE } from '../config/profile';
 import { crawlSource } from './crawl';
 import { normalizeOffer } from './normalize';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
-import { saveRun } from './store';
+import { latestRun, saveRun } from './store';
+import { compareCoverage, comparisonBaseline } from './coverage-delta';
 import { sendRunNotification } from './notify';
 import { diagnoseCoverage } from './diagnose';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
@@ -152,9 +153,17 @@ export async function finalizeBatches(runDate = utcDateKey()) {
     distinctOffers:distinct.size,confirmedSizeOffers:screened.filter(x=>x.sizeFit==='confirmed').length,
     qualifiedDeals:deals.length,nearMisses:near.length,coverage
   };
+  const previous=await latestRun();
+  if(previous?.report?.coverage?.length){
+    // Keep the original baseline only for repeated finalizations of this date.
+    // Tomorrow must compare with today's report, not with today's baseline.
+    const baseline=comparisonBaseline(previous,runDate);
+    report.comparison=compareCoverage(report,baseline);
+  }
   await saveRun(report,deals,near);
   let notification='not-configured';
-  try{notification=await sendRunNotification(runDate,deals,near,report)}
+  const snapshotAt=new Date(Math.max(...rows.map((r:any)=>new Date(r.finished_at).getTime()))).toISOString();
+  try{notification=await sendRunNotification(runDate,deals,near,report,snapshotAt)}
   catch(error){console.error('[finalize] notification failed',error);notification='failed'}
   console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length}`);
   return { runDate, complete:true, completedBatches:rows.length, expectedBatches:BATCH_COUNT,

@@ -21,6 +21,7 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - 16 recovery crons at 05:00 UTC rerun missing batches; retry finalizer at 07:00 UTC publishes `agent_runs` only after all batches are present
 - `/api/health` is the production health and deployment-SHA source
 - `/api/probe` replays current filtering/scoring against the latest complete stored batch snapshot without crawling shops
+- Finalized reports include a delta against the previous finalized report, including per-shop status, raw extraction and useful-offer counts. Same-day reruns preserve the earlier report as their baseline. `/api/probe` previews this comparison read-only; snapshot-keyed notifications can send a corrected same-day report without duplicate messages on finalizer retries.
 
 ## Product selection
 

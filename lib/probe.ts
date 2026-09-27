@@ -4,6 +4,8 @@ import { PROFILE } from '../config/profile';
 import { BATCH_COUNT } from './batch-run';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
+import { latestRun } from './store';
+import { compareCoverage, comparisonBaseline } from './coverage-delta';
 
 function sqlClient() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not configured');
@@ -68,6 +70,10 @@ export async function replayLatestCompleteSnapshot() {
     nearMisses: near.length,
     coverage,
   };
+  const previous = await latestRun();
+  if (previous?.report?.coverage?.length) {
+    report.comparison = compareCoverage(report,comparisonBaseline(previous,runDate));
+  }
 
   return {
     ok: true as const,
