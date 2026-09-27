@@ -5,7 +5,7 @@ import { RawOffer, ShopSource } from './types';
 const MAX_INPUT_CHARS = 16000;
 const MAX_CANDIDATES = 12;
 const MAX_OUTPUT_TOKENS = 1800;
-const DEFAULT_MODEL = 'gpt-6-luna';
+export const DEFAULT_LLM_EXTRACTION_MODEL = 'gpt-6-luna';
 
 const outputSchema = z.object({
   offers: z.array(z.object({
@@ -237,7 +237,7 @@ export async function llmExtractFromHtml(
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: config.model || process.env.LLM_EXTRACTION_MODEL || DEFAULT_MODEL,
+        model: config.model || process.env.LLM_EXTRACTION_MODEL || DEFAULT_LLM_EXTRACTION_MODEL,
         reasoning: { effort: 'none' },
         max_output_tokens: MAX_OUTPUT_TOKENS,
         input: [

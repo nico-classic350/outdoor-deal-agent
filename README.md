@@ -23,6 +23,8 @@ Source acquisition order is: official product feed/API where available, Awin pro
 
 The home page shows confirmed deals, review candidates, source quality and a browser-local watchlist. Historic prices are shown when the same offer was saved in more than one finalized run. A single consolidated email after a complete run can be enabled with `RESEND_API_KEY`, `DEAL_NOTIFY_FROM` and `DEAL_NOTIFY_TO`; without these settings, no email is sent. The provider request and database state are keyed by run date to avoid duplicate notifications.
 
+`/api/health` exposes the LLM pilot mode, shop allowlist, model and whether an API key is configured, without returning the key. `llmExtraction.readyForMammut` confirms that the Mammut shadow/active pilot is configured; a model call still requires a rendered page with no deterministic offers. Inspect the `llm-extraction-pilot` runtime log after the next eligible crawl to verify the actual request outcome.
+
 ## Build and CI
 
 - Node 24.x and pnpm 10.15.1 are pinned.

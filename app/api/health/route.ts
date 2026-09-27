@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { BATCH_COUNT } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
 import { browserFallbackConfig } from '../../../lib/browser-config.mjs';
+import { DEFAULT_LLM_EXTRACTION_MODEL } from '../../../lib/llm-extract';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,9 @@ export async function GET() {
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const pipelineExpectedComplete = utcMinutes >= 9 * 60 + 30;
   const browser = browserFallbackConfig();
+  const llmMode = process.env.LLM_EXTRACTION_MODE || 'off';
+  const llmShops = (process.env.LLM_EXTRACTION_SHOPS || 'mammut-eu').split(',').map(shop => shop.trim()).filter(Boolean);
+  const llmApiKeyConfigured = Boolean(process.env.OPENAI_API_KEY);
 
   const base = {
     deploymentSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
@@ -25,6 +29,13 @@ export async function GET() {
     browserFallbackRegion: browser.baseUrl ? new URL(browser.baseUrl).hostname : null,
     browserUnblockEnabled: browser.useUnblock,
     browserPlaywrightEnabled: browser.usePlaywright,
+    llmExtraction: {
+      mode: llmMode,
+      shops: llmShops,
+      model: process.env.LLM_EXTRACTION_MODEL || DEFAULT_LLM_EXTRACTION_MODEL,
+      apiKeyConfigured: llmApiKeyConfigured,
+      readyForMammut: (llmMode === 'shadow' || llmMode === 'active') && llmShops.includes('mammut-eu') && llmApiKeyConfigured && browser.configured,
+    },
     runDate,
     pipelineExpectedComplete,
   };
