@@ -69,6 +69,8 @@ export type LlmExtractionResult = {
   mode: 'off' | 'shadow' | 'active';
   candidateCount: number;
   elapsedMs: number;
+  httpStatus?: number;
+  apiErrorCode?: string;
 };
 
 function cleanText(value: string) {
@@ -251,7 +253,17 @@ export async function llmExtractFromHtml(
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!response.ok) return result(started, { offers: [], observedOffers: [], attempted: true, outcome: 'api-error', mode, candidateCount: candidates.length });
+    if (!response.ok) {
+      // Keep only the HTTP status and a short machine-readable error code; never log API response text.
+      let apiErrorCode: string | undefined;
+      try {
+        const body = await response.json();
+        const code = body?.error?.code || body?.error?.type;
+        if (typeof code === 'string' && /^[a-z0-9_]{1,60}$/i.test(code)) apiErrorCode = code;
+      } catch {}
+      return result(started, { offers: [], observedOffers: [], attempted: true, outcome: 'api-error',
+        mode, candidateCount: candidates.length, httpStatus: response.status, apiErrorCode });
+    }
     const payload = await response.json();
     const text = extractTextFromResponse(payload);
     let parsed: unknown;
