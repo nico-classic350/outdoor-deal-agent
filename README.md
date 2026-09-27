@@ -85,3 +85,17 @@ Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The d
 ## Optional integrations
 
 Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the remote browser layer; the application bundles only `playwright-core`, never a local browser binary.
+
+## LLM extraction pilot
+
+An optional OpenAI extraction fallback can inspect a bounded set of product-card text snippets only after Browserless has returned page content and the deterministic parsers found no offers. It cannot resolve blocked requests and does not run on feeds or successful parsers. The pilot is disabled unless `LLM_EXTRACTION_MODE` is set.
+
+- Set `LLM_EXTRACTION_MODE=shadow` to record evidence-validated candidate offers without passing them into normalization or deal selection.
+- The initial shop allowlist defaults to `mammut-eu`; change it with `LLM_EXTRACTION_SHOPS` (comma-separated shop IDs).
+- Set `OPENAI_API_KEY` in the server environment. The default model is `gpt-5.6-luna`; override with `LLM_EXTRACTION_MODEL`.
+- The request is capped at 12 product candidates, 16,000 input characters, 1,800 output tokens and 6 seconds. Browser fallback can attempt at most once per URL.
+- Shadow results appear as compact `llm-extraction-pilot` runtime log entries. Raw page HTML and evidence text are not logged.
+- Every accepted name, URL and current price must match supplied page evidence. A reference price is retained only when explicitly labeled in the evidence. Size and availability remain unknown; the LLM cannot confirm them.
+- After reviewing shadow results, `LLM_EXTRACTION_MODE=active` may be enabled for the allowlisted shop. Even then, the existing normalizer and deterministic deal rules remain the publication gate.
+
+Do not enable active mode until shadow results have been checked against the product pages. The pilot intentionally uses no LLM result to make a size or stock claim.
