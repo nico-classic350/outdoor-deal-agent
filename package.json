@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "smoke:browser": "node scripts/smoke-browser.mjs",
-    "build:next": "next build",
+    "build:next": "next build && node scripts/verify-playwright-trace.mjs",
     "build": "pnpm validate:config && pnpm build:next",
     "ci": "pnpm run preflight",
     "start": "next start",
