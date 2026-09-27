@@ -34,9 +34,11 @@ The home page shows confirmed deals, review candidates, source quality and a bro
 
 ## Release workflow
 
-All non-`main` Git branches are blocked from automatic Vercel deployment. Work-in-progress changes should be kept in a **draft pull request**. Draft pull requests do not run the expensive `verify` CI job, so intermediate commits cannot generate misleading failure notifications. Once the branch is complete, mark the PR **Ready for review**; GitHub then runs the full frozen-lockfile/preflight/build gate. After green CI, merge the tested change to `main`; only `main` triggers Vercel production deployment.
+All non-`main` Git branches are blocked from automatic Vercel deployment by the `**: false` rule in `vercel.json`; the `main: true` rule enables production deployments. The former `*: false` rule missed branch names containing `/`, so Vercel attempted previews and the connected integration failed before the build. `validate:config` now checks this branch behavior. Work-in-progress changes should be kept in a **draft pull request**. Draft pull requests do not run the expensive `verify` CI job, so intermediate commits cannot generate misleading failure notifications. Once the branch is complete, mark the PR **Ready for review**; GitHub then runs the full frozen-lockfile/preflight/build gate. After green CI, merge the tested change to `main`; only `main` triggers Vercel production deployment.
 
 This avoids both previous failure classes: Vercel preview integration-provisioning errors and GitHub failure emails from unfinished intermediate PR commits.
+
+In short-lived coding workspaces, terminal `git push` may lack GitHub credentials even while the connected GitHub app can write to the repository. Use the connected GitHub app for branch, commit, pull request and merge operations; use terminal Git for local inspection and fetch. Keep authentication out of repository files. If using terminal Git on a persistent personal machine, configure its own credential helper once and verify it separately. See `docs/AGENT_STATE.md` for the handoff procedure.
 
 ## Change observability
 

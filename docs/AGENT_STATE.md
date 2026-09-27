@@ -10,7 +10,8 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - Hosting/runtime: Vercel + Node 24 + Next.js/TypeScript
 - Database: Neon PostgreSQL
 - CI: GitHub Actions `CI & Change Observability`
-- Non-main Vercel previews are disabled; only `main` deploys automatically.
+- `git.deploymentEnabled` uses `**: false` for non-main branches (including branches with `/`) and `main: true` for production. The old `*: false` rule did not cover slashed branches. Vercel may retain historical failed-preview records; future feature pushes should create no preview deployment.
+- The connected GitHub app is the write path in short-lived Codex workspaces. Shell Git fetch works without credentials, but shell Git push may fail; do not try to persist a personal access token in the project or workspace. Create/update branches and PRs through the GitHub app, then fetch the remote branch locally. A personal terminal may use its own credential helper.
 
 ## Daily pipeline
 
