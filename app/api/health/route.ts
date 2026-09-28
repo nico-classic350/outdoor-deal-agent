@@ -44,6 +44,7 @@ export async function GET() {
     runDate,
     pipelineExpectedComplete,
     emailConfigured: email.configured,
+    emailProvider: email.provider,
     emailMissingSettings: email.missing,
   };
 
