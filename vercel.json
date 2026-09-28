@@ -41,7 +41,11 @@
     { "path": "/api/retry-batch/13", "schedule": "13 5 * * *" },
     { "path": "/api/retry-batch/14", "schedule": "14 5 * * *" },
     { "path": "/api/retry-batch/15", "schedule": "15 5 * * *" },
-    { "path": "/api/finalize-retry", "schedule": "0 7 * * *" },
-    { "path": "/api/watchdog", "schedule": "15 8 * * *" }
+    { "path": "/api/finalize-retry", "schedule": "0 6 * * *" },
+    { "path": "/api/watchdog", "schedule": "15 7 * * *" },
+    { "path": "/api/recovery/10", "schedule": "0 10 * * *" },
+    { "path": "/api/recovery/14", "schedule": "0 14 * * *" },
+    { "path": "/api/recovery/20", "schedule": "0 20 * * *" },
+    { "path": "/api/recovery/23", "schedule": "0 23 * * *" }
   ]
 }

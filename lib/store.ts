@@ -69,6 +69,22 @@ export async function latestRun() {
   }
 }
 
+export async function runByDate(runDate: string) {
+  const sql = client();
+  if (!sql) return null;
+  await ensureSchema();
+  const rows = await sql`SELECT * FROM agent_runs WHERE run_key=${runDate} LIMIT 1`;
+  return rows[0] || null;
+}
+
+export async function latestRunBefore(runDate: string) {
+  const sql = client();
+  if (!sql) return null;
+  await ensureSchema();
+  const rows = await sql`SELECT * FROM agent_runs WHERE run_key < ${runDate} ORDER BY run_key DESC LIMIT 1`;
+  return rows[0] || null;
+}
+
 export async function recentPriceHistory():Promise<Record<string,{date:string,price:number}[]>>{
   const sql=client(); if(!sql) return {};
   try{

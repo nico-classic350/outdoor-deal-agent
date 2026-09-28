@@ -5,7 +5,7 @@ import { PROFILE } from '../config/profile';
 import { crawlSource } from './crawl';
 import { normalizeOfferChecked } from './normalize';
 import { NormalizedOffer, RunReport, SourceCoverage } from './types';
-import { latestRun, saveRun } from './store';
+import { runByDate, latestRunBefore, saveRun } from './store';
 import { compareCoverage, comparisonBaseline } from './coverage-delta';
 import { sendRunNotification } from './notify';
 import { diagnoseCoverage } from './diagnose';
@@ -167,7 +167,17 @@ export async function finalizeBatches(runDate = utcDateKey()) {
     distinctOffers:distinct.size,confirmedSizeOffers:screened.filter(x=>x.sizeFit==='confirmed').length,
     qualifiedDeals:deals.length,nearMisses:near.length,coverage
   };
-  const previous=await latestRun();
+  const saved=await runByDate(runDate);
+  const previous=saved || await latestRunBefore(runDate);
+  if (saved?.report?.batchSnapshotAt === snapshotAt) {
+    let notification = 'pending';
+    try { notification = await sendRunNotification(runDate, saved.deals, saved.near_misses, saved.report, snapshotAt); }
+    catch (error) { console.error('[finalize] notification failed', error); notification = 'failed'; }
+    console.info(`[finalize] existing snapshot date=${runDate} notification=${notification}`);
+    return { runDate, complete: notification === 'sent', dataComplete: true,
+      completedBatches: rows.length, expectedBatches: BATCH_COUNT, missingBatches: [],
+      deals: saved.deals, nearMisses: saved.near_misses, report: saved.report, notification };
+  }
   if(previous?.report?.coverage?.length){
     const baseline=comparisonBaseline(previous,runDate,snapshotAt);
     report.comparison=compareCoverage(report,baseline);
@@ -176,8 +186,8 @@ export async function finalizeBatches(runDate = utcDateKey()) {
   let notification='not-configured';
   try{notification=await sendRunNotification(runDate,deals,near,report,snapshotAt)}
   catch(error){console.error('[finalize] notification failed',error);notification='failed'}
-  console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length} notification=${notification}`);
+  console.info(`[finalize] data-saved date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length} notification=${notification}`);
   if(notification==='not-configured') console.warn('[finalize] email skipped: mail settings missing');
-  return { runDate, complete:true, completedBatches:rows.length, expectedBatches:BATCH_COUNT,
+  return { runDate, complete:notification==='sent', dataComplete:true, completedBatches:rows.length, expectedBatches:BATCH_COUNT,
     missingBatches:[], deals, nearMisses:near, report, notification };
 }

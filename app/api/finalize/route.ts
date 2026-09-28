@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {
-    return NextResponse.json(await finalizeBatches(), { headers: { 'Cache-Control': 'no-store' } });
+    const result = await finalizeBatches();
+    return NextResponse.json(result, { status: result.complete ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
   } catch {
     console.error('[finalize] failure');
     return NextResponse.json({ error: 'finalize_failed' }, { status: 500 });
