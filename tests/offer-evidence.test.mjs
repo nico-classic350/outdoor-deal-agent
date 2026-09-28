@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 const require=createRequire(import.meta.url), ts=require('typescript');
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(readFileSync(filename,'utf8'),
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
-const {extractTargetedListing}=require('../lib/targeted.ts');
+const {extractTargetedListing,targetedListingUrls}=require('../lib/targeted.ts');
 const {extractHtmlFallback,extractJsonLd}=require('../lib/extract.ts');
 const {normalizeOffer}=require('../lib/normalize.ts');
 
@@ -27,6 +27,15 @@ test('Stoic listing discovers the brand and records only an explicit discount ba
   assert.equal(offers[0].brand,'Stoic');
   assert.equal(offers[0].observedDiscountPct,60);
   assert.equal(offers[0].rrp,undefined);
+});
+
+test('men’s sale discovery includes broad outdoor and softshell categories before brand pages',()=>{
+  const urls=targetedListingUrls({id:'bergfreunde',baseUrl:'https://www.bergfreunde.de'});
+  assert.deepEqual(urls.slice(0,3),[
+    'https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/',
+    'https://www.bergfreunde.de/outlet/softshellhosen/fuer--maenner/',
+    'https://www.bergfreunde.de/outlet/trekkinghosen/fuer--maenner/',
+  ]);
 });
 
 test('two incidental prices do not establish a reference price',()=>{
