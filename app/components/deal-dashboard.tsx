@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { NormalizedOffer, RunReport } from '../../lib/types';
 
 type History=Record<string,{date:string,price:number}[]>;
-type Props={deals:NormalizedOffer[];near:NormalizedOffer[];report:RunReport|null;history:History};
+type Props={deals:NormalizedOffer[];near:NormalizedOffer[];report:RunReport|null;history:History;emailStatus:'sent'|'pending'|'not-configured'};
 const diagnosis:Record<string,string>={blocked:'Zugriff blockiert', 'parser-empty':'Keine Produkte extrahiert',
   'no-relevant-products':'Keine passenden langen Hosen', 'no-reference-price':'Rabatt oder Referenzpreis nicht belegt',
   'selection-filtered':'Preisbeleg vorhanden, weitere Auswahlregel greift',
@@ -46,7 +46,7 @@ function DealCard({offer,history,saved,toggle}:{offer:NormalizedOffer;history:Hi
   </article>;
 }
 
-export function DealDashboard({deals,near,report,history}:Props){
+export function DealDashboard({deals,near,report,history,emailStatus}:Props){
   const [tab,setTab]=useState<'deals'|'near'|'saved'>('deals');
   const [saved,setSaved]=useState<string[]>([]);
   useEffect(()=>{try{const stored=JSON.parse(localStorage.getItem('outdoor-deal-watch-saved')||'[]');if(Array.isArray(stored))setSaved(stored.filter(x=>typeof x==='string'))}catch{}},[]);
@@ -64,7 +64,8 @@ export function DealDashboard({deals,near,report,history}:Props){
     <section className="summary" aria-label="Suchstatus"><div><span>QUELLEN</span><strong>{report?`${report.attemptedSources} / ${report.plannedSources}`:'—'}</strong></div>
       <div><span>PRODUKTE</span><strong>{report?.normalizedOffers??'—'}</strong></div>
       <div><span>PRÜFKANDIDATEN</span><strong>{near.length}</strong></div>
-      <div><span>STATUS</span><strong>{report?.attemptedSources===report?.plannedSources?'Vollständig':'Ausstehend'}</strong></div></section>
+      <div><span>STATUS</span><strong>{report?.attemptedSources===report?.plannedSources
+        ? emailStatus==='sent'?'Vollständig':'E-Mail ausstehend' : 'Ausstehend'}</strong></div></section>
     <section className="results"><div className="section-heading"><div><p className="overline dark">DEINE AUSWAHL</p><h2>Fundstücke</h2></div>
       <p>Nur Neuware und passende lange Hosen. Einige unklare Preis- oder Größenangaben bleiben als Prüfkandidaten sichtbar.</p></div>
       <nav className="tabs" aria-label="Ergebnisse"><button aria-current={tab==='deals'?'page':undefined} onClick={()=>setTab('deals')}>Bestätigte Deals <span>{deals.length}</span></button>

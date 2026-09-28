@@ -16,7 +16,8 @@ export async function GET() {
   const now = new Date();
   const runDate = now.toISOString().slice(0, 10);
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const pipelineExpectedComplete = utcMinutes >= 9 * 60 + 30;
+  // The finalizer retry runs in the 06:00 UTC hour; allow the Hobby cron window.
+  const pipelineExpectedComplete = utcMinutes >= 7 * 60 + 30;
   const browser = browserFallbackConfig();
   const llmMode = process.env.LLM_EXTRACTION_MODE || 'off';
   const llmShops = (process.env.LLM_EXTRACTION_SHOPS || 'mammut-eu').split(',').map(shop => shop.trim()).filter(Boolean);
@@ -117,9 +118,12 @@ export async function GET() {
 
     const batchesComplete = batchRowsToday === BATCH_COUNT;
     const finalizedToday = latestFinalizedRunDate === runDate;
-    const pipelineComplete = batchesComplete && finalizedToday;
-    const ok = !pipelineExpectedComplete || pipelineComplete;
-    const pipelineStatus = pipelineComplete ? 'complete' : pipelineExpectedComplete ? 'overdue' : 'warming';
+    const pipelineComplete = batchesComplete && finalizedToday && emailDeliveryStatus === 'sent';
+    // Once a report has been written, a missing email is a failed run immediately.
+    const ok = pipelineComplete || (!pipelineExpectedComplete && !finalizedToday);
+    const pipelineStatus = pipelineComplete ? 'complete' : batchesComplete && finalizedToday
+      ? pipelineExpectedComplete ? 'delivery-overdue' : 'delivery-pending'
+      : pipelineExpectedComplete ? 'overdue' : 'warming';
 
     return NextResponse.json(
       {

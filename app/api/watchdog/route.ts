@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { BATCH_COUNT, BATCH_SIZE, finalizeBatches, retryMissingBatch } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
-import { notificationConfig } from '../../../lib/notify';
+import { retrySavedNotifications } from '../../../lib/notify';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -40,22 +40,28 @@ export async function GET(request: NextRequest) {
         action = finalized.length ? 'refinalize' : 'finalize';
         const result = await finalizeBatches(runDate);
         detail = { complete: result.complete, notification: result.complete ? result.notification : null };
-      } else if (notificationConfig().configured) {
-        // Recover a failed or late-configured mail without rerunning the crawl.
-        const tables = await sql`SELECT to_regclass('public.agent_notification_snapshots') AS name`;
-        const sent = tables[0]?.name ? await sql`SELECT 1 FROM agent_notification_snapshots
-          WHERE run_date=${runDate} AND snapshot_at=${String(finalized[0].snapshot_at)}::timestamptz
-          AND state='sent' LIMIT 1` : [];
-        if (!sent.length) {
-          action = 'retry-notification';
-          const result = await finalizeBatches(runDate);
-          detail = { complete: result.complete, notification: result.complete ? result.notification : null };
-        }
       }
     }
-    const result = { runDate, completedBatches: completed.size, expectedBatches: BATCH_COUNT, missingBatches: missing, action, detail };
+    // A run completed after the last recovery window must still be finalized.
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const previousRows = await sql`SELECT batch_index,source_count,finished_at FROM agent_batch_runs WHERE run_date=${yesterday}`;
+    const previousComplete = previousRows.length === BATCH_COUNT && previousRows.every(row => {
+      const i = Number(row.batch_index);
+      return i >= 0 && i < BATCH_COUNT && Number(row.source_count) === SHOPS.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE).length;
+    });
+    if (previousComplete) {
+      const prior = await sql`SELECT report->>'batchSnapshotAt' AS snapshot_at FROM agent_runs WHERE run_key=${yesterday} LIMIT 1`;
+      const latest = Math.max(...previousRows.map(row => new Date(row.finished_at).getTime()));
+      if (!prior.length || new Date(String(prior[0].snapshot_at || '')).getTime() < latest) {
+        await finalizeBatches(yesterday);
+      }
+    }
+    const delivery = await retrySavedNotifications([yesterday, runDate]);
+    const todaySent = 'results' in delivery && delivery.results?.some(result => result.runDate === runDate && result.status === 'sent');
+    const result = { runDate, completedBatches: completed.size, expectedBatches: BATCH_COUNT,
+      missingBatches: missing, action, detail, delivery, complete: missing.length === 0 && Boolean(todaySent) };
     console.info(`[watchdog] ${JSON.stringify(result)}`);
-    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(result, { status: result.complete ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[watchdog] failure', error);
     return NextResponse.json({ error: 'watchdog_failed', runDate }, { status: 500 });

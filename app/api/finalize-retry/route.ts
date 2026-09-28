@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const result = await finalizeBatches();
     console.info(`[finalize-retry] complete=${result.complete}`);
-    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(result, { status: result.complete ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
   } catch {
     console.error('[finalize-retry] failure');
     return NextResponse.json({ error: 'finalize_retry_failed' }, { status: 500 });

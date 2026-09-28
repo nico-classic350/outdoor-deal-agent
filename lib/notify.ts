@@ -1,14 +1,8 @@
 import { neon } from '@neondatabase/serverless';
-import { NormalizedOffer, RunReport } from './types';
+import type { NormalizedOffer, RunReport } from './types';
+import { renderRunEmail } from './email-template';
 
-function esc(value:unknown){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));}
-function line(o:NormalizedOffer){
-  const link=/^https:\/\//.test(o.url)?`<a href="${esc(o.url)}">Zum Shop</a>`:'';
-  return `<li><strong>${esc(o.brand)} ${esc(o.name)}</strong> — ${o.effectiveCostEur.toFixed(2)} €,
-    ${Math.round(o.effectiveDiscountPct)} % · Größe: ${esc(o.sizeFit)} · ${link}
-    ${o.reason?`<br>${esc(o.reason)}`:''}</li>`;
-}
-function signed(value:number|null){return value===null?'—':`${value>0?'+':''}${value}`}
+export type NotificationResult = 'sent' | 'pending' | 'not-configured';
 
 export function notificationConfig() {
   const missing = (['RESEND_API_KEY', 'DEAL_NOTIFY_TO', 'DEAL_NOTIFY_FROM', 'DATABASE_URL'] as const)
@@ -16,49 +10,77 @@ export function notificationConfig() {
   return { configured: missing.length === 0, missing };
 }
 
-export async function sendRunNotification(runDate:string,deals:NormalizedOffer[],near:NormalizedOffer[],report:RunReport,snapshotAt:string){
-  const key=process.env.RESEND_API_KEY, recipient=process.env.DEAL_NOTIFY_TO,
-    sender=process.env.DEAL_NOTIFY_FROM, database=process.env.DATABASE_URL;
-  if(!notificationConfig().configured) return 'not-configured';
-  const sql=neon(database);
-  // A batch snapshot has a stable identity even when finalization is retried.
-  // A same-day full recrawl receives its own corrected report exactly once.
+export async function notificationState(runDate: string, snapshotAt: string): Promise<'sent' | 'pending' | 'not-configured'> {
+  if (!process.env.DATABASE_URL) return 'not-configured';
+  const sql = neon(process.env.DATABASE_URL!);
+  const table = await sql`SELECT to_regclass('public.agent_notification_snapshots') AS name`;
+  if (!table[0]?.name) return notificationConfig().configured ? 'pending' : 'not-configured';
+  const rows = await sql`SELECT state FROM agent_notification_snapshots
+    WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}::timestamptz LIMIT 1`;
+  return rows[0]?.state === 'sent' ? 'sent' : notificationConfig().configured ? 'pending' : 'not-configured';
+}
+
+export async function sendRunNotification(runDate: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport, snapshotAt: string): Promise<NotificationResult> {
+  if (!notificationConfig().configured) return 'not-configured';
+  const sql = neon(process.env.DATABASE_URL!);
   await sql`CREATE TABLE IF NOT EXISTS agent_notification_snapshots(
-    run_date text NOT NULL,snapshot_at timestamptz NOT NULL,sent_at timestamptz,
-    state text NOT NULL,PRIMARY KEY(run_date,snapshot_at))`;
-  const claimed=await sql`INSERT INTO agent_notification_snapshots(run_date,snapshot_at,state)
-    VALUES (${runDate},${snapshotAt},'sending') ON CONFLICT (run_date,snapshot_at) DO NOTHING RETURNING run_date`;
-  if(!claimed.length) return 'already-claimed';
-  const comparison=report.comparison;
-  const metrics=comparison?.metrics.filter(m=>['reachedSources','sourcesWithProducts','browserRecoveredSources','browserProviderLimitedSources','rawOffers','normalizedOffers','confirmedSizeOffers','qualifiedDeals','nearMisses','blocked','failed'].includes(m.metric))||[];
-  const labels:Record<string,string>={reachedSources:'Shops erreicht',sourcesWithProducts:'Shops mit Produkten',browserRecoveredSources:'Browser brachte Produkte',browserProviderLimitedSources:'Browserdienst limitiert',rawOffers:'Rohangebote',normalizedOffers:'Verwertbare Angebote',confirmedSizeOffers:'Größe bestätigt',qualifiedDeals:'Bestätigte Deals',nearMisses:'Prüfkandidaten',blocked:'Blockiert',failed:'Fehlgeschlagen'};
-  const changes=comparison?.sources.filter(s=>s.parsedDelta!==0||s.status!==s.previousStatus)||[];
-  const html=`<h1>Outdoor Deal Watch · ${esc(runDate)}</h1>
-    ${comparison?`<h2>Veränderung zum ${comparison.baselineKind==='same-day-rerun'?'vorigen Bericht von heute':'vorigen Tagesbericht'}</h2>
-    <p>Vergleichsbasis: ${esc(comparison.baseline.finishedAt)}. Shopdaten können sich zwischen Läufen ändern.</p>
-    <table border="1" cellpadding="6"><thead><tr><th>Stufe</th><th>Vorher</th><th>Jetzt</th><th>Delta</th></tr></thead><tbody>
-    ${metrics.map(m=>`<tr><td>${esc(labels[m.metric]||m.metric)}</td><td>${m.previous??'—'}</td><td>${m.current}</td><td>${signed(m.delta)}</td></tr>`).join('')}</tbody></table>
-    <h3>Geänderte Shops</h3><ul>${changes.map(s=>`<li>${esc(s.name)}: ${esc(s.previousStatus??'—')} → ${esc(s.status)} · Rohangebote ${s.previousParsedOffers??'—'} → ${s.parsedOffers} (${signed(s.parsedDelta)}) · verwertbar ${s.previousPricedOffers??'—'} → ${s.pricedOffers??'—'} (${signed(s.pricedDelta)})</li>`).join('')}</ul>`:''}
-    <h2>${deals.length} bestätigte Deals</h2><ol>${deals.map(line).join('')}</ol>
-    ${deals.length?'':`<h2>Prüfkandidaten</h2><ol>${near.map(line).join('')}</ol>`}
-    <h2>Quellen</h2><p>${report.attemptedSources}/${report.plannedSources} geprüft ·
-    ${report.success} erfolgreich · ${report.partial} eingeschränkt · ${report.failed} fehlgeschlagen ·
-    ${report.blocked} blockiert.</p>
-    <ul>${report.coverage.map(c=>`<li>${esc(c.name)}: ${esc(c.status)} · ${c.parsedOffers} Rohangebote ·
-      ${c.pricedOffers??0} verwertbar · ${c.qualifiedOffers??0} bestätigte Deals</li>`).join('')}</ul>`;
-  try{
-    const response=await fetch('https://api.resend.com/emails',{
-      method:'POST',signal:AbortSignal.timeout(12000),
-      headers:{authorization:`Bearer ${key}`,'content-type':'application/json','Idempotency-Key':`outdoor-deals/${runDate}/${snapshotAt}`},
-      body:JSON.stringify({from:sender,to:[recipient],subject:`Outdoor Deal Watch ${runDate}${comparison?.baselineKind==='same-day-rerun'?' (aktualisiert)':''}: ${deals.length} bestätigte Deals`,html})
+    run_date text NOT NULL, snapshot_at timestamptz NOT NULL, sent_at timestamptz,
+    state text NOT NULL, attempted_at timestamptz NOT NULL DEFAULT now(), provider_id text,
+    PRIMARY KEY(run_date,snapshot_at))`;
+  await sql`ALTER TABLE agent_notification_snapshots ADD COLUMN IF NOT EXISTS attempted_at timestamptz NOT NULL DEFAULT now()`;
+  await sql`ALTER TABLE agent_notification_snapshots ADD COLUMN IF NOT EXISTS provider_id text`;
+  // A crashed worker can be reclaimed. The stable provider key prevents duplicate
+  // requests during its 24-hour retention window; the DB protects all sent runs.
+  const claimed = await sql`INSERT INTO agent_notification_snapshots(run_date,snapshot_at,state,attempted_at)
+    VALUES (${runDate},${snapshotAt},'sending',now())
+    ON CONFLICT (run_date,snapshot_at) DO UPDATE SET attempted_at=now(),state='sending'
+    WHERE agent_notification_snapshots.state='sending'
+      AND agent_notification_snapshots.attempted_at < now()-interval '15 minutes'
+    RETURNING run_date`;
+  if (!claimed.length) {
+    const current = await sql`SELECT state FROM agent_notification_snapshots
+      WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}::timestamptz`;
+    return current[0]?.state === 'sent' ? 'sent' : 'pending';
+  }
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST', signal: AbortSignal.timeout(12000),
+      headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json',
+        'Idempotency-Key': `outdoor-deals/${runDate}/${snapshotAt}` },
+      body: JSON.stringify({ from: process.env.DEAL_NOTIFY_FROM, to: [process.env.DEAL_NOTIFY_TO],
+        subject: `Outdoor Deal Alert ${runDate}${report.comparison?.baselineKind === 'same-day-rerun' ? ' (aktualisiert)' : ''}: ${deals.length} Deals`,
+        html: renderRunEmail(runDate, deals, near, report) }),
     });
-    if(!response.ok) throw new Error(`notification HTTP ${response.status}`);
-    await sql`UPDATE agent_notification_snapshots SET state='sent', sent_at=now()
-      WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}`;
+    if (!response.ok) throw new Error(`notification HTTP ${response.status}`);
+    const result: unknown = await response.json();
+    const id = typeof result === 'object' && result !== null && 'id' in result ? result.id : undefined;
+    if (typeof id !== 'string' || !id) throw new Error('notification provider returned no message id');
+    await sql`UPDATE agent_notification_snapshots SET state='sent',sent_at=now(),provider_id=${id}
+      WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}::timestamptz`;
     return 'sent';
-  }catch(error){
+  } catch (error) {
     await sql`DELETE FROM agent_notification_snapshots
-      WHERE run_date=${runDate} AND snapshot_at=${snapshotAt} AND state='sending'`;
+      WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}::timestamptz AND state='sending'`;
     throw error;
   }
+}
+
+export async function retrySavedNotifications(runDates: string[]) {
+  if (!notificationConfig().configured) return { status: 'not-configured' as const, attempted: 0 };
+  const sql = neon(process.env.DATABASE_URL!);
+  const rows = await sql`SELECT run_key,report,deals,near_misses FROM agent_runs
+    WHERE run_key=${runDates[0]} OR run_key=${runDates[1]} ORDER BY run_key ASC`;
+  const results = [];
+  for (const row of rows) {
+    const report = row.report as RunReport;
+    if (!report?.batchSnapshotAt) continue;
+    try {
+      const status = await sendRunNotification(String(row.run_key), row.deals as NormalizedOffer[], row.near_misses as NormalizedOffer[], report, report.batchSnapshotAt);
+      results.push({ runDate: row.run_key, status });
+    } catch (error) {
+      console.error(`[notification] retry failed date=${row.run_key}`, error);
+      results.push({ runDate: row.run_key, status: 'failed' });
+    }
+  }
+  return { status: results.length && results.every(x => x.status === 'sent') ? 'sent' as const : 'pending' as const, attempted: results.length, results };
 }

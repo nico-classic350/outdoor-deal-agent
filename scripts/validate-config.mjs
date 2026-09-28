@@ -89,9 +89,11 @@ const retryIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/retry-batch\/(
 assert(JSON.stringify(retryIndexes)===JSON.stringify(expectedIndexes),`Vercel schedules exactly ${expectedBatches} recovery crons`);
 assert(crons.filter(c=>c.path==='/api/finalize').length===1,'exactly one finalizer cron exists');
 assert(crons.filter(c=>c.path==='/api/finalize-retry').length===1,'exactly one finalizer retry cron exists');
-assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 7 * * *','finalizer retry runs after batch recovery window');
+assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 6 * * *','finalizer retry runs after batch recovery window');
 assert(crons.filter(c=>c.path==='/api/watchdog').length===1,'one watchdog cron monitors delayed or missing daily work');
-assert(crons.find(c=>c.path==='/api/watchdog')?.schedule==='15 8 * * *','watchdog runs once daily after recovery, compatible with Hobby cron limits');
+assert(crons.find(c=>c.path==='/api/watchdog')?.schedule==='15 7 * * *','watchdog runs once daily after recovery, compatible with Hobby cron limits');
+for(const hour of [10,14,20,23]) assert(crons.find(c=>c.path===`/api/recovery/${hour}`)?.schedule===`0 ${hour} * * *`, `daily recovery window ${hour} UTC exists`);
+assert(read('app/api/recovery/[slot]/route.ts').includes("../../watchdog/route"),'recovery windows use the authenticated watchdog');
 assert(!crons.some(c=>c.path==='/api/run'||c.path==='/api/admin/run'),'monolithic run routes are not scheduled');
 
 const scheduleCounts=new Map();
