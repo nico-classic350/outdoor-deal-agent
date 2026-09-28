@@ -6,6 +6,7 @@ import { browserFallbackConfig } from '../../../lib/browser-config.mjs';
 import { DEFAULT_LLM_EXTRACTION_MODEL } from '../../../lib/llm-extract';
 import { screenForPublication } from '../../../lib/publication-safety.mjs';
 import { PROFILE } from '../../../config/profile';
+import { notificationConfig } from '../../../lib/notify';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export async function GET() {
   const llmMode = process.env.LLM_EXTRACTION_MODE || 'off';
   const llmShops = (process.env.LLM_EXTRACTION_SHOPS || 'mammut-eu').split(',').map(shop => shop.trim()).filter(Boolean);
   const llmApiKeyConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const email = notificationConfig();
 
   const base = {
     deploymentSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
@@ -40,6 +42,8 @@ export async function GET() {
     },
     runDate,
     pipelineExpectedComplete,
+    emailConfigured: email.configured,
+    emailMissingSettings: email.missing,
   };
 
   if (!databaseConfigured) {
@@ -56,7 +60,8 @@ export async function GET() {
     const tables = await sql`
       SELECT
         to_regclass('public.agent_batch_runs') AS batch_table,
-        to_regclass('public.agent_runs') AS run_table
+        to_regclass('public.agent_runs') AS run_table,
+        to_regclass('public.agent_notification_snapshots') AS notification_table
     `;
 
     const batchTablePresent = Boolean(tables[0]?.batch_table);
@@ -64,6 +69,8 @@ export async function GET() {
     let batchRowsToday = 0;
     let latestFinalizedAt: string | null = null;
     let latestFinalizedRunDate: string | null = null;
+    let emailDeliveryStatus = 'no-report-today';
+    let reportSnapshotAt: string | null = null;
     let sourceQuality: {usableSources:number;verifiedReferenceSources:number;confirmedSizeSources:number;qualifiedDeals:number}|null=null;
 
     if (batchTablePresent) {
@@ -85,6 +92,7 @@ export async function GET() {
       const row = rows[0];
       if (row?.finished_at) latestFinalizedAt = new Date(row.finished_at).toISOString();
       if (row?.started_at) latestFinalizedRunDate = new Date(row.started_at).toISOString().slice(0, 10);
+      if (latestFinalizedRunDate === runDate) reportSnapshotAt = row?.report?.batchSnapshotAt || null;
       const sources=Array.isArray(row?.report?.coverage)?row.report.coverage:[];
       const candidates=[...(Array.isArray(row?.deals)?row.deals:[]),...(Array.isArray(row?.near_misses)?row.near_misses:[])];
       const safe=screenForPublication(candidates,PROFILE.minEffectiveDiscountPct);
@@ -95,6 +103,16 @@ export async function GET() {
         // Match /api/coverage: report counters may have been written under old gates.
         qualifiedDeals:safe.deals.length
       };
+    }
+
+    if (reportSnapshotAt) {
+      emailDeliveryStatus = email.configured ? 'pending' : 'not-configured';
+      if (tables[0]?.notification_table) {
+        const deliveries = await sql`SELECT state FROM agent_notification_snapshots
+          WHERE run_date=${runDate} AND snapshot_at=${reportSnapshotAt}::timestamptz LIMIT 1`;
+        if (deliveries[0]?.state === 'sent') emailDeliveryStatus = 'sent';
+        else if (deliveries[0]?.state === 'sending') emailDeliveryStatus = 'sending';
+      }
     }
 
     const batchesComplete = batchRowsToday === BATCH_COUNT;
@@ -116,6 +134,7 @@ export async function GET() {
         latestFinalizedAt,
         latestFinalizedRunDate,
         sourceQuality,
+        emailDeliveryStatus,
         pipelineStatus,
         ...base,
       },

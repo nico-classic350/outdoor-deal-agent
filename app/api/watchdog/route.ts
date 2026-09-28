@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { BATCH_COUNT, BATCH_SIZE, finalizeBatches, retryMissingBatch } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
+import { notificationConfig } from '../../../lib/notify';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -39,6 +40,17 @@ export async function GET(request: NextRequest) {
         action = finalized.length ? 'refinalize' : 'finalize';
         const result = await finalizeBatches(runDate);
         detail = { complete: result.complete, notification: result.complete ? result.notification : null };
+      } else if (notificationConfig().configured) {
+        // Recover a failed or late-configured mail without rerunning the crawl.
+        const tables = await sql`SELECT to_regclass('public.agent_notification_snapshots') AS name`;
+        const sent = tables[0]?.name ? await sql`SELECT 1 FROM agent_notification_snapshots
+          WHERE run_date=${runDate} AND snapshot_at=${String(finalized[0].snapshot_at)}::timestamptz
+          AND state='sent' LIMIT 1` : [];
+        if (!sent.length) {
+          action = 'retry-notification';
+          const result = await finalizeBatches(runDate);
+          detail = { complete: result.complete, notification: result.complete ? result.notification : null };
+        }
       }
     }
     const result = { runDate, completedBatches: completed.size, expectedBatches: BATCH_COUNT, missingBatches: missing, action, detail };
