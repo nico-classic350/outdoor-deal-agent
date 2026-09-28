@@ -9,6 +9,6 @@ export const PROFILE = {
   minEffectiveDiscountPct: 40,
   localRadiusKm: 10,
   fit: 'regular-relaxed',
-  allowedProductTerms: ['trekking pant','hiking pant','outdoor pant','travel pant','walking trouser','trekkinghose','wanderhose','outdoorhose'],
+  allowedProductTerms: ['trekking pant','hiking pant','outdoor pant','travel pant','walking trouser','trekkinghose','wanderhose','outdoorhose','softshellhose','stretchhose','funktionshose','reisehose'],
   excludedProductTerms: ['rain pant','waterproof pant','hardshell pant','winter pant','ski pant','zip-off','convertible pant','bib','insulated pant'],
 } as const;

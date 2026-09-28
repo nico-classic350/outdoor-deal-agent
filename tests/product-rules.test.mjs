@@ -13,6 +13,10 @@ test('rejects explicit product mismatches while allowing eligible outdoor trouse
   assert.equal(productEligible('Damen Wanderhose'), false);
   assert.equal(productEligible('Herren Trekkinghose Zip-off'), false);
   assert.equal(productEligible('Herren Softshell Pants Light', 'Leichtes Stretchmaterial, wasserdichte Tasche; passende Shorts separat erhältlich'), true);
+  assert.equal(productEligible('Herren Softshellhose Light'), true);
+  assert.equal(productEligible('Herren Stretchhose für Wandern'), true);
+  assert.equal(productEligible('Herren Funktionshose'), true);
+  assert.equal(productEligible('Herren Softshell Winterhose'), false);
   assert.equal(productEligible('Herren Climbing Pants', 'Leichte Kletterhose für Reisen und Wandern'), true);
   assert.equal(productEligible('Herren Outdoorhose', 'Damen Wanderhose'), false);
 });

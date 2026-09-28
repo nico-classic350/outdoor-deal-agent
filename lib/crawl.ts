@@ -8,6 +8,7 @@ import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
 import { llmExtractFromHtml } from './llm-extract';
 import { productEligible } from './product-rules.mjs';
+import { rankDiscoveryUrls } from './discovery.mjs';
 import robotsParser from 'robots-parser';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
@@ -72,13 +73,7 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
     if(!safeShopUrl(source,u)) return false;
     const s=u.toLowerCase(); return BRAND_TERMS.some(b=>s.includes(b.replace(/[^a-z0-9]/g,''))||s.includes(b)) || /(herren|men|pants|hose|hosen|trousers|outdoor|trekking|wandern|sale|outlet|kalhoty|panske|spodnie|meskie|pantaloni|pantalon)/.test(s);
   });
-  const unique=[...new Set(filtered)];
-  if(source.id==='4camping') unique.sort((a,b)=>{
-    const rank=(url:string)=>Number(/kalhoty|pants|hose|hosen|trousers/i.test(url))*4 +
-      Number(/panske|men|herren/i.test(url))*2 + Number(BRAND_TERMS.some(brand=>url.toLowerCase().includes(brand)));
-    return rank(b)-rank(a);
-  });
-  return unique.slice(0,120);
+  return rankDiscoveryUrls(filtered,PROFILE.brands,120);
 }
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
@@ -87,12 +82,15 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
   let parseEmptyHttp200 = 0;
   let earlyBrowserTried = false;
+  let browserAttempted = false;
   let directLlmTried = false;
   const coverage=(status:SourceCoverage['status'], note?:string):SourceCoverage=>({
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
   });
   const browserFallback = async (urls:string[], blocked=false) => {
+    if(browserAttempted){technicalPath.push('browser-already-attempted');return false;}
+    browserAttempted=true;
     technicalPath.push('browser-fallback',`browser-mode-${browserFallbackMode()}`);
     const before=offers.length;
     for(const url of [...new Set(urls)].filter(url=>safeShopUrl(source,url)).slice(0,BROWSER_FALLBACK_URL_LIMIT)){
@@ -235,6 +233,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         httpStatuses.push(r.status);
         if(r.status===403||r.status===429){
           technicalPath.push(`http-${r.status}`);
+          if(offers.some(o=>productEligible(o.name,o.description))){
+            technicalPath.push('browser-skipped-existing-products');
+            return {offers,coverage:coverage('partial','Direct or official feed already supplied relevant products')};
+          }
           if(!browserFallbackConfigured()){
             technicalPath.push('browser-fallback-disabled');
             return {offers,coverage:coverage('blocked',`HTTP ${r.status}; Browserless token not configured`)};
@@ -273,7 +275,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
 
         parseEmptyHttp200 += 1;
         const enoughBudgetForBrowser = deadline - Date.now() > 18000;
-        if (!earlyBrowserTried && browserFallbackConfigured() && parseEmptyHttp200 >= EARLY_BROWSER_EMPTY_HTTP_THRESHOLD && enoughBudgetForBrowser) {
+        if (!earlyBrowserTried && !offers.some(o=>productEligible(o.name,o.description)) && browserFallbackConfigured() && parseEmptyHttp200 >= EARLY_BROWSER_EMPTY_HTTP_THRESHOLD && enoughBudgetForBrowser) {
           earlyBrowserTried = true;
           technicalPath.push('browser-early-escalation');
           const succeeded = await browserFallback([url], false);
@@ -292,6 +294,14 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       if(!browserFallbackConfigured()){
         technicalPath.push('browser-fallback-disabled');
         return {offers,coverage:coverage(offers.length?'partial':'failed',offers.length?'Products parsed, but no verified reference price':'No parseable data; Browserless token not configured')};
+      }
+      if(offers.some(o=>productEligible(o.name,o.description))){
+        technicalPath.push('browser-skipped-existing-products');
+        return {offers,coverage:coverage('partial','Relevant products parsed; browser session reserved for empty or blocked shops')};
+      }
+      if(browserAttempted){
+        technicalPath.push('browser-already-attempted');
+        return {offers,coverage:coverage(offers.length?'partial':'failed','Browser fallback already attempted for this shop')};
       }
       const candidates=discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl];
       const succeeded=await browserFallback(candidates,false);

@@ -13,7 +13,13 @@ const BRAND_SLUG: Record<string,string> = {
 
 export function targetedListingUrls(source: ShopSource): string[] {
   if(source.id==='mammut-eu') return ['https://www.mammut.com/de/de/category/5834-10/wanderhosen'];
-  const urls:string[]=[];
+  // Broad men's sale pages cover brands and product families missing from a
+  // fixed list of brand-filtered URLs. They are ordinary HTTP requests.
+  const urls:string[]=source.id==='bergfreunde' ? [
+    'https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/',
+    'https://www.bergfreunde.de/outlet/softshellhosen/fuer--maenner/',
+    'https://www.bergfreunde.de/outlet/trekkinghosen/fuer--maenner/',
+  ] : [];
   for (const brand of PROFILE.brands) {
     const slug=BRAND_SLUG[brand] || brand.toLowerCase().replace(/[^a-z0-9]+/g,'-');
     if(source.id==='bergfreunde'){
@@ -26,7 +32,7 @@ export function targetedListingUrls(source: ShopSource): string[] {
       urls.push(`https://www.sport-schuster.de/${slug}-hosen/`);
     }
   }
-  return urls;
+  return [...new Set(urls)];
 }
 
 function moneyValues(s:string):number[]{
