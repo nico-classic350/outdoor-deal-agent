@@ -176,7 +176,8 @@ export async function finalizeBatches(runDate = utcDateKey()) {
   let notification='not-configured';
   try{notification=await sendRunNotification(runDate,deals,near,report,snapshotAt)}
   catch(error){console.error('[finalize] notification failed',error);notification='failed'}
-  console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length}`);
+  console.info(`[finalize] success date=${runDate} attempted=${coverage.length}/${SHOPS.length} deals=${deals.length} notification=${notification}`);
+  if(notification==='not-configured') console.warn('[finalize] email skipped: mail settings missing');
   return { runDate, complete:true, completedBatches:rows.length, expectedBatches:BATCH_COUNT,
     missingBatches:[], deals, nearMisses:near, report, notification };
 }

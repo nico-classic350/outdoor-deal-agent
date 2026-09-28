@@ -10,10 +10,16 @@ function line(o:NormalizedOffer){
 }
 function signed(value:number|null){return value===null?'—':`${value>0?'+':''}${value}`}
 
+export function notificationConfig() {
+  const missing = (['RESEND_API_KEY', 'DEAL_NOTIFY_TO', 'DEAL_NOTIFY_FROM', 'DATABASE_URL'] as const)
+    .filter(name => !process.env[name]);
+  return { configured: missing.length === 0, missing };
+}
+
 export async function sendRunNotification(runDate:string,deals:NormalizedOffer[],near:NormalizedOffer[],report:RunReport,snapshotAt:string){
   const key=process.env.RESEND_API_KEY, recipient=process.env.DEAL_NOTIFY_TO,
     sender=process.env.DEAL_NOTIFY_FROM, database=process.env.DATABASE_URL;
-  if(!key||!recipient||!sender||!database) return 'not-configured';
+  if(!notificationConfig().configured) return 'not-configured';
   const sql=neon(database);
   // A batch snapshot has a stable identity even when finalization is retried.
   // A same-day full recrawl receives its own corrected report exactly once.
