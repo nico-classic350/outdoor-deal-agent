@@ -1,13 +1,31 @@
 import { neon } from '@neondatabase/serverless';
 import type { NormalizedOffer, RunReport } from './types';
 import { renderRunEmail } from './email-template';
+import { notificationConfig } from './mail-config.mjs';
+import { sendGmailEmail } from './gmail-smtp.mjs';
+
+export { notificationConfig } from './mail-config.mjs';
 
 export type NotificationResult = 'sent' | 'pending' | 'not-configured';
 
-export function notificationConfig() {
-  const missing = (['RESEND_API_KEY', 'DEAL_NOTIFY_TO', 'DEAL_NOTIFY_FROM', 'DATABASE_URL'] as const)
-    .filter(name => !process.env[name]);
-  return { configured: missing.length === 0, missing };
+async function submitEmail(runDate: string, snapshotAt: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport) {
+  const subject = `Outdoor Deal Alert ${runDate}${report.comparison?.baselineKind === 'same-day-rerun' ? ' (aktualisiert)' : ''}: ${deals.length} Deals`;
+  const html = renderRunEmail(runDate, deals, near, report);
+  if (notificationConfig().provider === 'gmail') {
+    return sendGmailEmail({ user: process.env.GMAIL_SMTP_USER!, password: process.env.GMAIL_SMTP_APP_PASSWORD!,
+      to: process.env.DEAL_NOTIFY_TO!, subject, html, runDate, snapshotAt });
+  }
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST', signal: AbortSignal.timeout(12000),
+    headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json',
+      'Idempotency-Key': `outdoor-deals/${runDate}/${snapshotAt}` },
+    body: JSON.stringify({ from: process.env.DEAL_NOTIFY_FROM, to: [process.env.DEAL_NOTIFY_TO], subject, html }),
+  });
+  if (!response.ok) throw new Error(`notification HTTP ${response.status}`);
+  const result: unknown = await response.json();
+  const id = typeof result === 'object' && result !== null && 'id' in result ? result.id : undefined;
+  if (typeof id !== 'string' || !id) throw new Error('notification provider returned no message id');
+  return id;
 }
 
 export async function notificationState(runDate: string, snapshotAt: string): Promise<'sent' | 'pending' | 'not-configured'> {
@@ -29,8 +47,9 @@ export async function sendRunNotification(runDate: string, deals: NormalizedOffe
     PRIMARY KEY(run_date,snapshot_at))`;
   await sql`ALTER TABLE agent_notification_snapshots ADD COLUMN IF NOT EXISTS attempted_at timestamptz NOT NULL DEFAULT now()`;
   await sql`ALTER TABLE agent_notification_snapshots ADD COLUMN IF NOT EXISTS provider_id text`;
-  // A crashed worker can be reclaimed. The stable provider key prevents duplicate
-  // requests during its 24-hour retention window; the DB protects all sent runs.
+  // A crashed worker can be reclaimed. The DB protects confirmed sends; Resend
+  // additionally deduplicates retries for 24 hours. SMTP can very rarely duplicate
+  // a message if the process dies after acceptance but before the DB commit.
   const claimed = await sql`INSERT INTO agent_notification_snapshots(run_date,snapshot_at,state,attempted_at)
     VALUES (${runDate},${snapshotAt},'sending',now())
     ON CONFLICT (run_date,snapshot_at) DO UPDATE SET attempted_at=now(),state='sending'
@@ -43,18 +62,7 @@ export async function sendRunNotification(runDate: string, deals: NormalizedOffe
     return current[0]?.state === 'sent' ? 'sent' : 'pending';
   }
   try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST', signal: AbortSignal.timeout(12000),
-      headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json',
-        'Idempotency-Key': `outdoor-deals/${runDate}/${snapshotAt}` },
-      body: JSON.stringify({ from: process.env.DEAL_NOTIFY_FROM, to: [process.env.DEAL_NOTIFY_TO],
-        subject: `Outdoor Deal Alert ${runDate}${report.comparison?.baselineKind === 'same-day-rerun' ? ' (aktualisiert)' : ''}: ${deals.length} Deals`,
-        html: renderRunEmail(runDate, deals, near, report) }),
-    });
-    if (!response.ok) throw new Error(`notification HTTP ${response.status}`);
-    const result: unknown = await response.json();
-    const id = typeof result === 'object' && result !== null && 'id' in result ? result.id : undefined;
-    if (typeof id !== 'string' || !id) throw new Error('notification provider returned no message id');
+    const id = await submitEmail(runDate, snapshotAt, deals, near, report);
     await sql`UPDATE agent_notification_snapshots SET state='sent',sent_at=now(),provider_id=${id}
       WHERE run_date=${runDate} AND snapshot_at=${snapshotAt}::timestamptz`;
     return 'sent';

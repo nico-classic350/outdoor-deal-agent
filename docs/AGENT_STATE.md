@@ -49,7 +49,7 @@ No local Chromium or full Playwright browser binaries are bundled.
 ## Results and notification
 
 - `/` displays confirmed deals, review candidates, source evidence and browser-local saved items.
-- A complete daily run requires a provider-accepted consolidated email with images and full coverage. `RESEND_API_KEY`, `DEAL_NOTIFY_FROM`, `DEAL_NOTIFY_TO` must be configured in Production; missing settings make health and finalizer unhealthy, and the recovery cron retries failed sends from the saved report. No recipient address is hardcoded.
+- A complete daily run requires a provider-accepted consolidated email with images and full coverage. Production needs `DEAL_NOTIFY_TO` and either `GMAIL_SMTP_USER` plus `GMAIL_SMTP_APP_PASSWORD` for Gmail, or `RESEND_API_KEY` plus `DEAL_NOTIFY_FROM` for a verified sending domain. Missing settings make health and finalizer unhealthy, and the recovery cron retries failed sends from the saved report. No recipient address is hardcoded.
 - Price history on the page uses finalized offer snapshots from up to 30 recent runs.
 
 ## Browserless environment variables
