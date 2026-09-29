@@ -16,10 +16,14 @@ function brandOf(o:RawOffer){
     return new RegExp(`(?:^|[^a-zà-ž])${term}(?=$|[^a-zà-ž])`,'i').test(title);
   })||'';
 }
-export type RejectionReason = 'brand-or-price-missing'|'discount-unverified'|'product-mismatch'|
+export type RejectionReason = 'brand-not-allowed'|'name-missing'|'currency-missing'|'price-missing'|'discount-unverified'|'product-mismatch'|
   'sold-out'|'excluded-color'|'low-product-fit'|'incompatible-size';
 export async function normalizeOfferChecked(o:RawOffer):Promise<{offer:NormalizedOffer|null;reason?:RejectionReason}>{
-  const brand=brandOf(o); if(!brand || !o.name || !o.currency || !o.price) return {offer:null,reason:'brand-or-price-missing'};
+  const brand=brandOf(o);
+  if (!o.name) return {offer:null,reason:'name-missing'};
+  if (!brand) return {offer:null,reason:'brand-not-allowed'};
+  if (!o.currency) return {offer:null,reason:'currency-missing'};
+  if (!Number.isFinite(o.price) || Number(o.price)<=0) return {offer:null,reason:'price-missing'};
   const rrp=o.rrp && o.rrp>o.price && o.rrpSource ? o.rrp : undefined;
   const rrpVerified=Boolean(rrp&&o.rrpSource);
   const discountVerified=Boolean(o.discountSource && Number.isFinite(o.observedDiscountPct) && o.observedDiscountPct!>=40);

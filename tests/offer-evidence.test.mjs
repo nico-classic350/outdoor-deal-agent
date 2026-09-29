@@ -7,7 +7,16 @@ require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
 const {extractTargetedListing,targetedListingUrls}=require('../lib/targeted.ts');
 const {extractHtmlFallback,extractJsonLd}=require('../lib/extract.ts');
-const {normalizeOffer}=require('../lib/normalize.ts');
+const {normalizeOffer,normalizeOfferChecked}=require('../lib/normalize.ts');
+
+test('normalization diagnostics distinguish missing evidence from disallowed brands',async()=>{
+  const base={sourceId:'shop',merchant:'Shop',merchantCountry:'DE',url:'https://shop.example/p',
+    name:'Mammut Runbold Pants Men',currency:'EUR',price:70};
+  assert.equal((await normalizeOfferChecked({...base,name:'Unknown Pants Men'})).reason,'brand-not-allowed');
+  assert.equal((await normalizeOfferChecked({...base,price:undefined})).reason,'price-missing');
+  assert.equal((await normalizeOfferChecked({...base,currency:undefined})).reason,'currency-missing');
+  assert.equal((await normalizeOfferChecked(base)).reason,'discount-unverified');
+});
 
 test('Mammut product card is discovered without doubling screen reader price',()=>{
   const html=`<article data-e2e-test="product-card-container"><a href="/de/de/products/1022-02580/runbold-iv-pants-men">
