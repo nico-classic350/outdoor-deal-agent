@@ -1,0 +1,38 @@
+name: Isolated discovery benchmark
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  direct-baseline:
+    if: startsWith(github.head_ref, 'feat/high-yield-discovery-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Crawl fixed direct-only cohort without DB or mail
+        run: node scripts/benchmark-discovery.mjs
+      - name: Crawl same cohort with candidate discovery and evidence
+        env:
+          DISCOVERY_STRATEGY: expanded
+        run: node scripts/benchmark-discovery.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: discovery-baseline-${{ github.run_id }}
+          path: observability/discovery-*.json
+          if-no-files-found: warn
+          retention-days: 7
