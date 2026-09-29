@@ -19,7 +19,7 @@ process.env.LLM_EXTRACTION_MODE='off';
 const {SHOPS}=require('../config/shops.ts');
 const {crawlSource}=require('../lib/crawl.ts');
 const {normalizeOfferChecked}=require('../lib/normalize.ts');
-const {productEligible}=require('../lib/product-rules.mjs');
+const {productEligible,selectOffers}=require('../lib/product-rules.mjs');
 const strategy=process.env.DISCOVERY_STRATEGY==='expanded'?'expanded':'baseline';
 const originalFetch=globalThis.fetch;
 let networkRequests=0,networkErrors=0;
@@ -35,6 +35,8 @@ for(const id of cohort){
   const priorRequests=networkRequests,priorErrors=networkErrors;
   const {offers,coverage}=await crawlSource(source);
   const checked=await Promise.allSettled(offers.map(normalizeOfferChecked));
+  const normalized=checked.filter(result=>result.status==='fulfilled'&&result.value.offer).map(result=>result.value.offer);
+  const prices=offers.map(offer=>Number(offer.price)).filter(price=>Number.isFinite(price)&&price>0);
   const reasons={};
   for(const result of checked){
     const reason=result.status==='rejected'?'conversion-error':result.value.reason;
@@ -47,7 +49,11 @@ for(const id of cohort){
       (Boolean(offer.rrp && offer.rrp>Number(offer.price) && offer.rrpSource) ||
         Boolean(offer.discountSource && Number.isFinite(offer.observedDiscountPct) && Number(offer.observedDiscountPct)>=40))).length,
     unverifiedPreviousPriceOffers:offers.filter(offer=>offer.rrp && offer.rrp>Number(offer.price) && !offer.rrpSource).length,
-    normalizedOffers:checked.filter(result=>result.status==='fulfilled'&&result.value.offer).length,
+    normalizedOffers:normalized.length,
+    discount40Offers:normalized.filter(offer=>offer.effectiveDiscountPct>=40).length,
+    confirmedSizeOffers:normalized.filter(offer=>offer.sizeFit==='confirmed').length,
+    qualifiedOffers:selectOffers(normalized,40).qualifiedCount,
+    priceRange:prices.length?[Math.min(...prices),Math.max(...prices)]:null,
     reasons,httpStatuses:coverage.httpStatuses,technicalPath:coverage.technicalPath,elapsedMs:coverage.elapsedMs,
     networkRequests:networkRequests-priorRequests,networkErrors:networkErrors-priorErrors};
   results.push(record);
@@ -59,6 +65,9 @@ const summary={strategy:`${strategy}-direct-only`,cohort,results,totals:{
   relevantOffers:results.reduce((n,x)=>n+x.relevantOffers,0),
   priceEvidenceOffers:results.reduce((n,x)=>n+x.priceEvidenceOffers,0),
   normalizedOffers:results.reduce((n,x)=>n+x.normalizedOffers,0),
+  discount40Offers:results.reduce((n,x)=>n+x.discount40Offers,0),
+  confirmedSizeOffers:results.reduce((n,x)=>n+x.confirmedSizeOffers,0),
+  qualifiedOffers:results.reduce((n,x)=>n+x.qualifiedOffers,0),
   networkRequests:results.reduce((n,x)=>n+x.networkRequests,0),
   networkErrors:results.reduce((n,x)=>n+x.networkErrors,0),
 }};
