@@ -7,6 +7,9 @@ import pLimit from 'p-limit';
 // A batch runs several shops concurrently. Keep its Browserless sessions serial
 // so a single function invocation cannot consume several provider slots.
 const browserSessionLimit = pLimit(1);
+// A rejected credential is shared by every shop in this function invocation.
+// Do not turn one bad token into dozens of paid, doomed REST/CDP attempts.
+let rejectedCredentialEndpoint: string | null = null;
 
 export type BrowserFallbackResult = {
   offers: RawOffer[];
@@ -423,6 +426,9 @@ async function browserExtractOnce(
   options: { blocked?: boolean; deadline?: number } = {},
 ): Promise<BrowserFallbackResult> {
   if (!browserFallbackConfigured()) return { offers: [], mode: 'none', steps: ['browser-disabled'] };
+  const credentialEndpoint=browserFallbackConfig().contentUrl;
+  if(credentialEndpoint && rejectedCredentialEndpoint===credentialEndpoint)
+    return { offers: [], mode: 'none', steps: ['provider-auth-circuit-open'] };
   const started = Date.now();
   const deadline = Math.min(options.deadline ?? started + 45000, started + 45000);
   const blocked = Boolean(options.blocked);
@@ -432,6 +438,11 @@ async function browserExtractOnce(
   const record = (result: BrowserFallbackResult) => { attempts.push(result); return result.offers.length > 0; };
   const providerLimited = (result: BrowserFallbackResult) => result.httpStatus === 429 ||
     result.steps?.includes('playwright-provider-rate-limited');
+  const providerAuthRejected = (result: BrowserFallbackResult) => {
+    const rejected=result.httpStatus===401 || result.steps?.includes('playwright-provider-auth-error');
+    if(rejected && credentialEndpoint) rejectedCredentialEndpoint=credentialEndpoint;
+    return rejected;
+  };
   const done = (result: BrowserFallbackResult): BrowserFallbackResult => {
     const { renderedHtml: _renderedHtml, ...publicResult } = result;
     return {
@@ -470,16 +481,19 @@ async function browserExtractOnce(
   if (blocked) {
     const unblock = await unblockContentRequest(source, url, deadline);
     if (record(unblock)) return done(unblock);
+    if (providerAuthRejected(unblock)) return done({ ...unblock, steps: ['provider-auth-rejected'] });
     if (providerLimited(unblock)) return done({ ...unblock, steps: ['provider-rate-limited'] });
 
     if (canTry() && browserPlaywrightConfigured()) {
       const handoff = await unblockedPlaywrightRequest(source, url, deadline);
       if (record(handoff)) return done(handoff);
+      if (providerAuthRejected(handoff)) return done({ ...handoff, steps: ['provider-auth-rejected'] });
       if (providerLimited(handoff)) return done({ ...handoff, steps: ['provider-rate-limited'] });
 
       if (canTry()) {
         const stealth = await freshPlaywrightRequest(source, url, true, deadline);
         if (record(stealth)) return done(stealth);
+        if (providerAuthRejected(stealth)) return done({ ...stealth, steps: ['provider-auth-rejected'] });
         if (providerLimited(stealth)) return done({ ...stealth, steps: ['provider-rate-limited'] });
       }
     }
@@ -487,6 +501,7 @@ async function browserExtractOnce(
     if (canTry()) {
       const content = await contentRequest(source, url, deadline);
       if (record(content)) return done(content);
+      if (providerAuthRejected(content)) return done({ ...content, steps: ['provider-auth-rejected'] });
       if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
     }
     const llmOffers = await tryLlmFallback();
@@ -499,11 +514,13 @@ async function browserExtractOnce(
 
   const content = await contentRequest(source, url, deadline);
   if (record(content)) return done(content);
+  if (providerAuthRejected(content)) return done({ ...content, steps: ['provider-auth-rejected'] });
   if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
 
   if (canTry() && browserPlaywrightConfigured()) {
     const playwright = await freshPlaywrightRequest(source, url, false, deadline);
     if (record(playwright)) return done(playwright);
+    if (providerAuthRejected(playwright)) return done({ ...playwright, steps: ['provider-auth-rejected'] });
     if (providerLimited(playwright)) return done({ ...playwright, steps: ['provider-rate-limited'] });
     const llmOffers = await tryLlmFallback();
     if (llmOffers.length) return done({ offers: llmOffers, mode: 'playwright', steps: ['llm-pilot-active-offers'] });

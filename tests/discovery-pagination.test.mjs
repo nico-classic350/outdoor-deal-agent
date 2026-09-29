@@ -12,6 +12,9 @@ const {crawlSource}=require('../lib/crawl.ts');
 test('pagination follows only an explicit next page of the same listing',()=>{
   const url='https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/';
   assert.equal(nextListingPage('<a rel="next" href="?page=2">Weiter</a>',url),`${url}?page=2`);
+  assert.equal(nextListingPage('<nav><a href="/outlet/outdoor-hosen/fuer--maenner/2/">2</a></nav>',url),`${url}2/`);
+  assert.equal(nextListingPage('<nav><a href="/outlet/outdoor-hosen/fuer--maenner/3/">3</a></nav>',`${url}2/`),`${url}3/`);
+  assert.equal(nextListingPage('<nav><a href="?page=3">3</a></nav>',`${url}?page=2`),`${url}?page=3`);
   assert.equal(nextListingPage('<a rel="next" href="https://other.example/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="/outlet/jacken/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="?sort=popular">Weiter</a>',url),null);
@@ -21,12 +24,12 @@ test('expanded discovery adds unique relevant observations without changing base
   const originalFetch=globalThis.fetch, old=process.env.DISCOVERY_STRATEGY;
   const base='https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/';
   const page=(start,next)=>Array.from({length:8},(_,i)=>`<article class="product-card"><a href="/stoic-wanderhose-${start+i}/">Stoic Wanderhose Herren ${start+i}</a><span>69,95 €</span></article>`).join('')+
-    (next?'<nav><a rel="next" href="?page=2">Weiter</a></nav>':'');
+    (next?'<nav><a rel="next" href="/outlet/outdoor-hosen/fuer--maenner/2/">Weiter</a></nav>':'');
   globalThis.fetch=async url=>{
     const u=String(url);
     if(u.endsWith('/robots.txt')) return {ok:false,status:404};
     if(u===base) return {ok:true,status:200,text:async()=>page(1,true)};
-    if(u===`${base}?page=2`) return {ok:true,status:200,text:async()=>page(9,false)};
+    if(u===`${base}2/`) return {ok:true,status:200,text:async()=>page(9,false)};
     return {ok:false,status:404};
   };
   const source={id:'bergfreunde',name:'Bergfreunde',country:'DE',baseUrl:'https://www.bergfreunde.de'};

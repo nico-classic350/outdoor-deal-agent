@@ -112,6 +112,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('browser-provider-rate-limited');
         break;
       }
+      if(result.steps?.includes('provider-auth-rejected') || result.steps?.includes('provider-auth-circuit-open')){
+        technicalPath.push('browser-provider-auth-rejected');
+        break;
+      }
       if(offers.length>before) break;
     }
     return offers.length>before;

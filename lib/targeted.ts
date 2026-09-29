@@ -225,17 +225,28 @@ export function nextListingPage(html:string,pageUrl:string):string|null {
   for(const node of candidates){
     const a=$(node);
     const label=`${a.attr('rel')||''} ${a.attr('aria-label')||''} ${a.text()}`.trim();
-    if(!/(?:\bnext\b|\bnächste\b|\bweiter\b|^2$|[→›»])/i.test(label)) continue;
     let next:URL;
     try{next=new URL(a.attr('href')||'',pageUrl)}catch{continue}
     if(next.protocol!=='https:' || next.host!==current.host ||
-       next.pathname.replace(/\/+$/,'')!==current.pathname.replace(/\/+$/,'')) continue;
+       !next.pathname.startsWith(current.pathname.replace(/\/\d+\/?$/,'/'))) continue;
+    const currentPath=current.pathname.replace(/\/+$/,'');
+    const basePath=currentPath.replace(/\/\d+$/,'');
+    const priorPathNumber=Number(currentPath.match(/\/(\d+)$/)?.[1]||1);
+    const nextPathNumber=Number(next.pathname.replace(/\/+$/,'').match(/\/(\d+)$/)?.[1]);
+    if(next.pathname.replace(/\/+$/,'')===`${basePath}/${priorPathNumber+1}` &&
+       nextPathNumber===priorPathNumber+1 && nextPathNumber<=5 &&
+       next.search===current.search &&
+       (/(?:\bnext\b|\bnächste\b|\bweiter\b|[→›»])/i.test(label)||label===String(nextPathNumber))){
+      next.hash='';return next.toString();
+    }
+    if(next.pathname.replace(/\/+$/,'')!==currentPath) continue;
     const changed=[...new Set([...next.searchParams.keys(),...current.searchParams.keys()])]
       .filter(key=>next.searchParams.get(key)!==current.searchParams.get(key));
     if(changed.length!==1 || !/^(?:page|p|currentPage|pageNumber)$/i.test(changed[0])) continue;
     const number=Number(next.searchParams.get(changed[0]));
     const prior=Number(current.searchParams.get(changed[0])||1);
     if(!Number.isInteger(number)||number!==prior+1||number>5) continue;
+    if(!/(?:\bnext\b|\bnächste\b|\bweiter\b|[→›»])/i.test(label) && label!==String(number)) continue;
     next.hash='';
     return next.toString();
   }

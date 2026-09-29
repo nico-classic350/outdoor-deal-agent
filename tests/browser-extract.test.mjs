@@ -122,3 +122,21 @@ test('one transient provider 429 can recover without starting Playwright', async
     else process.env.BROWSERLESS_API_TOKEN = previousToken;
   }
 });
+
+test('provider 401 opens a credential-scoped circuit across shops',async()=>{
+  const oldFetch=globalThis.fetch,oldToken=process.env.BROWSERLESS_API_TOKEN;
+  process.env.BROWSERLESS_API_TOKEN='test-rejected-token-unique';
+  let requests=0;
+  globalThis.fetch=async()=>{requests++;return {ok:false,status:401,headers:{get:()=>null}}};
+  try{
+    const first=await browserExtract(shop,shop.baseUrl,{blocked:true,deadline:Date.now()+5000});
+    const second=await browserExtract({...shop,id:'another-shop'},shop.baseUrl,{deadline:Date.now()+5000});
+    assert.equal(requests,1);
+    assert.ok(first.steps.includes('provider-auth-rejected'));
+    assert.ok(second.steps.includes('provider-auth-circuit-open'));
+  }finally{
+    globalThis.fetch=oldFetch;
+    if(oldToken===undefined)delete process.env.BROWSERLESS_API_TOKEN;
+    else process.env.BROWSERLESS_API_TOKEN=oldToken;
+  }
+});

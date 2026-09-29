@@ -21,11 +21,18 @@ const {crawlSource}=require('../lib/crawl.ts');
 const {normalizeOfferChecked}=require('../lib/normalize.ts');
 const {productEligible}=require('../lib/product-rules.mjs');
 const strategy=process.env.DISCOVERY_STRATEGY==='expanded'?'expanded':'baseline';
+const originalFetch=globalThis.fetch;
+let networkRequests=0,networkErrors=0;
+globalThis.fetch=async (...args)=>{
+  networkRequests++;
+  try{return await originalFetch(...args)}catch(error){networkErrors++;throw error}
+};
 const cohort=['bergfreunde','bergzeit','4camping','mammut-eu'];
 const results=[];
 for(const id of cohort){
   const source=SHOPS.find(shop=>shop.id===id);
   if(!source)throw new Error(`missing source: ${id}`);
+  const priorRequests=networkRequests,priorErrors=networkErrors;
   const {offers,coverage}=await crawlSource(source);
   const checked=await Promise.allSettled(offers.map(normalizeOfferChecked));
   const reasons={};
@@ -40,7 +47,8 @@ for(const id of cohort){
       (Boolean(offer.rrp && offer.rrp>Number(offer.price) && offer.rrpSource) ||
         Boolean(offer.discountSource && Number.isFinite(offer.observedDiscountPct) && Number(offer.observedDiscountPct)>=40))).length,
     normalizedOffers:checked.filter(result=>result.status==='fulfilled'&&result.value.offer).length,
-    reasons,httpStatuses:coverage.httpStatuses,technicalPath:coverage.technicalPath,elapsedMs:coverage.elapsedMs};
+    reasons,httpStatuses:coverage.httpStatuses,technicalPath:coverage.technicalPath,elapsedMs:coverage.elapsedMs,
+    networkRequests:networkRequests-priorRequests,networkErrors:networkErrors-priorErrors};
   results.push(record);
   console.log(`[benchmark] ${JSON.stringify(record)}`);
 }
@@ -50,6 +58,8 @@ const summary={strategy:`${strategy}-direct-only`,cohort,results,totals:{
   relevantOffers:results.reduce((n,x)=>n+x.relevantOffers,0),
   priceEvidenceOffers:results.reduce((n,x)=>n+x.priceEvidenceOffers,0),
   normalizedOffers:results.reduce((n,x)=>n+x.normalizedOffers,0),
+  networkRequests:results.reduce((n,x)=>n+x.networkRequests,0),
+  networkErrors:results.reduce((n,x)=>n+x.networkErrors,0),
 }};
 const out=`observability/discovery-${strategy}.json`;
 mkdirSync(dirname(out),{recursive:true});

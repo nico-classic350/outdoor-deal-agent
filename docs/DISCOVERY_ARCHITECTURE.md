@@ -27,6 +27,39 @@ mandatory daily email. Never treat an unverified reference price as a deal.
 6. **Normalization and publication**: store rejection reasons, canonicalize
    product models and retain only validated deals; delivery stays mandatory.
 
+## Clean-slate design
+
+The crawler would be a separate, durable discovery pipeline. A small registry
+defines merchant ownership, permission/robots policy, category/feed entry
+points, parser version, currency and a daily request/unit allowance. Discovery
+jobs emit URL candidates to a per-host queue with a canonical product identity
+and an expiry. A scheduler orders these by measured marginal yield (new,
+relevant products with evidence per request), not by raw HTML card count.
+
+Feed and sitemap adapters run cheaply. Listing adapters discover explicit
+pagination and product links, inspect structured state and retain provenance of
+each price/discount. Product-detail workers verify only the promising
+observations. A browser worker handles JavaScript-rendered, permitted pages
+with a single bounded session per host; it can reuse a session for scrolling or
+pagination, but stops on authentication, provider limits and poor yield. A
+per-provider circuit breaker and daily unit ledger prevent a broken token from
+being retried across all 91 shops. Browserless Playwright is one rendering
+route, not a separate free allowance or an access-rights bypass.
+
+All observations carry `shop, canonical URL, model, variant, observed at,
+parser version, source URL, price, price evidence, stock/size evidence`. Raw
+observations are immutable and deduplicated by canonical URL and variant;
+normalization records every rejection reason. This preserves the distinction
+between a high-volume, low-quality category and genuinely usable deals.
+
+Workers checkpoint progress by shop/page and retry with idempotency keys.
+They finish independently of the daily publication clock. Publication takes
+the latest complete-enough snapshot, records missing/late shops explicitly,
+then must send and confirm the email; a delayed crawler cannot silently mark a
+production run successful without delivery. The current implementation is a
+smaller per-shop Vercel Function pipeline, so this architecture is a migration
+target, not a claim that durable queues or browser sessions already exist.
+
 ## Budget and measurement
 
 - Prioritize requests by expected unique relevant products per second/unit.
@@ -35,6 +68,9 @@ mandatory daily email. Never treat an unverified reference price as a deal.
   relevant products, price evidence, normalized offers and error reasons.
 - Browserless sessions are a scarce escalation path: REST, CDP and Playwright
   all consume the same account units; no blanket `/crawl` over 91 shops.
+- Merchant requests use per-host concurrency, timeouts and robots checks.
+  Respect access restrictions; no CAPTCHA solving, private-account scraping,
+  rotating identities or proxy evasion as a volume strategy.
 - An isolated test batch must never write `agent_batch_runs`, finalize a report
   or send mail. Only promote a candidate after direct tests and a live cohort
   show a useful gain without quality regression or provider overuse.
