@@ -24,10 +24,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Crawl fixed direct-only cohort without DB or mail
+        env:
+          DISCOVERY_COHORT: bergzeit
         run: node scripts/benchmark-discovery.mjs
-      - name: Crawl same cohort with bounded pagination
+      - name: Crawl same cohort with candidate discovery and evidence
         env:
           DISCOVERY_STRATEGY: expanded
+          DISCOVERY_COHORT: bergzeit
         run: node scripts/benchmark-discovery.mjs
       - uses: actions/upload-artifact@v4
         if: always()

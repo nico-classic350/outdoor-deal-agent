@@ -6,8 +6,9 @@ import { readFileSync } from 'node:fs';
 const require=createRequire(import.meta.url), ts=require('typescript');
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(readFileSync(filename,'utf8'),
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
-const {nextListingPage}=require('../lib/targeted.ts');
+const {nextListingPage,extractTargetedListing}=require('../lib/targeted.ts');
 const {crawlSource}=require('../lib/crawl.ts');
+const {normalizeOfferChecked}=require('../lib/normalize.ts');
 
 test('pagination follows only an explicit next page of the same listing',()=>{
   const url='https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/';
@@ -18,6 +19,25 @@ test('pagination follows only an explicit next page of the same listing',()=>{
   assert.equal(nextListingPage('<a rel="next" href="https://other.example/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="/outlet/jacken/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="?sort=popular">Weiter</a>',url),null);
+});
+
+test('Bergzeit prior price is evidence only when explicitly paired with current price',async()=>{
+  const old=process.env.DISCOVERY_STRATEGY;
+  const source={id:'bergzeit',name:'Bergzeit',country:'DE'};
+  const html=`<script type="application/ld+json">{"itemListElement":[{"url":"https://www.bergzeit.de/p/runbold/123456/"}]}</script>
+    <script>elementsList:[{"data":{"productId":"123456","brand":{"name":"Mammut"},"name":"Runbold Pants Men","price":{"current":"60,00 €","old":"120,00 €"}}}]</script>`;
+  try{
+    delete process.env.DISCOVERY_STRATEGY;
+    const baseline=extractTargetedListing(html,source,'https://www.bergzeit.de/herren/bekleidung/hosen/');
+    assert.equal((await normalizeOfferChecked(baseline[0])).reason,'discount-unverified');
+    process.env.DISCOVERY_STRATEGY='expanded';
+    const candidate=extractTargetedListing(html,source,'https://www.bergzeit.de/herren/bekleidung/hosen/');
+    assert.equal(candidate[0].rrpSource,'merchant:listing-old-price');
+    assert.ok((await normalizeOfferChecked(candidate[0])).offer);
+  }finally{
+    if(old===undefined)delete process.env.DISCOVERY_STRATEGY;
+    else process.env.DISCOVERY_STRATEGY=old;
+  }
 });
 
 test('expanded discovery adds unique relevant observations without changing baseline path',async()=>{

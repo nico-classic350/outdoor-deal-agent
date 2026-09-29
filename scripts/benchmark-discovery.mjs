@@ -27,7 +27,7 @@ globalThis.fetch=async (...args)=>{
   networkRequests++;
   try{return await originalFetch(...args)}catch(error){networkErrors++;throw error}
 };
-const cohort=['bergfreunde','bergzeit','4camping','mammut-eu'];
+const cohort=(process.env.DISCOVERY_COHORT||'bergfreunde,bergzeit,4camping,mammut-eu').split(',').map(x=>x.trim()).filter(Boolean);
 const results=[];
 for(const id of cohort){
   const source=SHOPS.find(shop=>shop.id===id);
@@ -46,6 +46,7 @@ for(const id of cohort){
     priceEvidenceOffers:offers.filter(offer=>offer.name && productEligible(offer.name,offer.description) &&
       (Boolean(offer.rrp && offer.rrp>Number(offer.price) && offer.rrpSource) ||
         Boolean(offer.discountSource && Number.isFinite(offer.observedDiscountPct) && Number(offer.observedDiscountPct)>=40))).length,
+    unverifiedPreviousPriceOffers:offers.filter(offer=>offer.rrp && offer.rrp>Number(offer.price) && !offer.rrpSource).length,
     normalizedOffers:checked.filter(result=>result.status==='fulfilled'&&result.value.offer).length,
     reasons,httpStatuses:coverage.httpStatuses,technicalPath:coverage.technicalPath,elapsedMs:coverage.elapsedMs,
     networkRequests:networkRequests-priorRequests,networkErrors:networkErrors-priorErrors};
