@@ -215,3 +215,29 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
 
   return out.slice(0,80);
 }
+
+// Follow only an explicitly linked next page of the same listing. Never guess
+// pagination parameters or broaden the crawl to another category/host.
+export function nextListingPage(html:string,pageUrl:string):string|null {
+  const $=cheerio.load(html);
+  const current=new URL(pageUrl);
+  const candidates=$('a[rel="next"],a[aria-label],nav a[href], [class*="pagination"] a[href]').toArray();
+  for(const node of candidates){
+    const a=$(node);
+    const label=`${a.attr('rel')||''} ${a.attr('aria-label')||''} ${a.text()}`.trim();
+    if(!/(?:\bnext\b|\bnächste\b|\bweiter\b|^2$|[→›»])/i.test(label)) continue;
+    let next:URL;
+    try{next=new URL(a.attr('href')||'',pageUrl)}catch{continue}
+    if(next.protocol!=='https:' || next.host!==current.host ||
+       next.pathname.replace(/\/+$/,'')!==current.pathname.replace(/\/+$/,'')) continue;
+    const changed=[...new Set([...next.searchParams.keys(),...current.searchParams.keys()])]
+      .filter(key=>next.searchParams.get(key)!==current.searchParams.get(key));
+    if(changed.length!==1 || !/^(?:page|p|currentPage|pageNumber)$/i.test(changed[0])) continue;
+    const number=Number(next.searchParams.get(changed[0]));
+    const prior=Number(current.searchParams.get(changed[0])||1);
+    if(!Number.isInteger(number)||number!==prior+1||number>5) continue;
+    next.hash='';
+    return next.toString();
+  }
+  return null;
+}

@@ -20,6 +20,7 @@ const {SHOPS}=require('../config/shops.ts');
 const {crawlSource}=require('../lib/crawl.ts');
 const {normalizeOfferChecked}=require('../lib/normalize.ts');
 const {productEligible}=require('../lib/product-rules.mjs');
+const strategy=process.env.DISCOVERY_STRATEGY==='expanded'?'expanded':'baseline';
 const cohort=['bergfreunde','bergzeit','4camping','mammut-eu'];
 const results=[];
 for(const id of cohort){
@@ -43,14 +44,14 @@ for(const id of cohort){
   results.push(record);
   console.log(`[benchmark] ${JSON.stringify(record)}`);
 }
-const summary={strategy:'baseline-direct-only',cohort,results,totals:{
+const summary={strategy:`${strategy}-direct-only`,cohort,results,totals:{
   rawOffers:results.reduce((n,x)=>n+x.rawOffers,0),
   uniqueProductUrls:results.reduce((n,x)=>n+x.uniqueProductUrls,0),
   relevantOffers:results.reduce((n,x)=>n+x.relevantOffers,0),
   priceEvidenceOffers:results.reduce((n,x)=>n+x.priceEvidenceOffers,0),
   normalizedOffers:results.reduce((n,x)=>n+x.normalizedOffers,0),
 }};
-const out='observability/discovery-baseline.json';
+const out=`observability/discovery-${strategy}.json`;
 mkdirSync(dirname(out),{recursive:true});
 writeFileSync(out,JSON.stringify(summary,null,2)+'\n');
 console.log(`[benchmark-total] ${JSON.stringify(summary.totals)}`);

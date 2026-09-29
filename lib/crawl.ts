@@ -3,7 +3,7 @@ import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
 import { browserExtract, browserFallbackConfigured, browserFallbackMode } from './browser';
-import { targetedListingUrls, extractTargetedListing } from './targeted';
+import { targetedListingUrls, extractTargetedListing, nextListingPage } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
 import { ingestAwinProductFeed } from './awin-feed';
 import { llmExtractFromHtml } from './llm-extract';
@@ -78,6 +78,7 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
   const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
+  const expandedDiscovery=process.env.DISCOVERY_STRATEGY==='expanded';
   const budgetRemaining=()=>Date.now()<deadline;
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
   let parseEmptyHttp200 = 0;
@@ -154,9 +155,19 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
     const targeted=targetedListingUrls(source);
     if(targeted.length){
       technicalPath.push('targeted-brand-listings');
-      discovered=targeted;
-      for(const url of targeted){
-        if(!budgetRemaining()) { technicalPath.push('source-budget-exhausted'); break; }
+      discovered=[...targeted];
+      const firstPass=expandedDiscovery ? (source.id==='bergfreunde'?3:1) : targeted.length;
+      const queue=targeted.slice(0,firstPass);
+      const later=targeted.slice(firstPass);
+      const visited=new Set<string>();
+      let extraPages=0;
+      while(queue.length||later.length){
+        const url=queue.shift()||later.shift()!;
+        if(visited.has(url)) continue;
+        visited.add(url);
+        if(!budgetRemaining() || (expandedDiscovery && deadline-Date.now()<10000)) {
+          technicalPath.push('source-budget-exhausted'); break;
+        }
         if(!await allowedByRobots(source,url,deadline)){technicalPath.push('robots-denied');continue}
         try{
           technicalPath.push('listing-http-fetch');
@@ -166,6 +177,13 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           const x=extractTargetedListing(html,source,url);
           if(x.length) technicalPath.push('listing-card-extraction');
           offers.push(...x);
+          if(expandedDiscovery && x.length>=8 && extraPages<6){
+            const next=nextListingPage(html,url);
+            if(next && !visited.has(next) && !discovered.includes(next)){
+              queue.push(next);discovered.push(next);extraPages++;
+              technicalPath.push('listing-pagination-discovered');
+            }
+          }
         }catch{ technicalPath.push('listing-http-error'); }
       }
       const unique=[...new Map(offers.map(o=>[`${o.url.toLowerCase()}|${o.sizes.join('/')}|${o.price}|${o.rrp||''}`,o])).values()];
