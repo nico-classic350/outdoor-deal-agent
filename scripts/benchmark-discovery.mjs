@@ -21,6 +21,7 @@ const {crawlSource}=require('../lib/crawl.ts');
 const {normalizeOfferChecked}=require('../lib/normalize.ts');
 const {productEligible,selectOffers}=require('../lib/product-rules.mjs');
 const strategy=process.env.DISCOVERY_STRATEGY==='expanded'?'expanded':'baseline';
+if(strategy==='baseline')process.env.DISCOVERY_STRATEGY='baseline';
 const originalFetch=globalThis.fetch;
 let networkRequests=0,networkErrors=0;
 globalThis.fetch=async (...args)=>{

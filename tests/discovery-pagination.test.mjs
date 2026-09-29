@@ -6,9 +6,8 @@ import { readFileSync } from 'node:fs';
 const require=createRequire(import.meta.url), ts=require('typescript');
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(readFileSync(filename,'utf8'),
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
-const {nextListingPage,extractTargetedListing}=require('../lib/targeted.ts');
+const {nextListingPage}=require('../lib/targeted.ts');
 const {crawlSource}=require('../lib/crawl.ts');
-const {normalizeOfferChecked}=require('../lib/normalize.ts');
 
 test('pagination follows only an explicit next page of the same listing',()=>{
   const url='https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/';
@@ -19,25 +18,6 @@ test('pagination follows only an explicit next page of the same listing',()=>{
   assert.equal(nextListingPage('<a rel="next" href="https://other.example/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="/outlet/jacken/?page=2">Weiter</a>',url),null);
   assert.equal(nextListingPage('<a rel="next" href="?sort=popular">Weiter</a>',url),null);
-});
-
-test('Bergzeit prior price is evidence only when explicitly paired with current price',async()=>{
-  const old=process.env.DISCOVERY_STRATEGY;
-  const source={id:'bergzeit',name:'Bergzeit',country:'DE'};
-  const html=`<script type="application/ld+json">{"itemListElement":[{"url":"https://www.bergzeit.de/p/runbold/123456/"}]}</script>
-    <script>elementsList:[{"data":{"productId":"123456","brand":{"name":"Mammut"},"name":"Runbold Pants Men","price":{"current":"60,00 €","old":"120,00 €"}}}]</script>`;
-  try{
-    delete process.env.DISCOVERY_STRATEGY;
-    const baseline=extractTargetedListing(html,source,'https://www.bergzeit.de/herren/bekleidung/hosen/');
-    assert.equal((await normalizeOfferChecked(baseline[0])).reason,'discount-unverified');
-    process.env.DISCOVERY_STRATEGY='expanded';
-    const candidate=extractTargetedListing(html,source,'https://www.bergzeit.de/herren/bekleidung/hosen/');
-    assert.equal(candidate[0].rrpSource,'merchant:listing-old-price');
-    assert.ok((await normalizeOfferChecked(candidate[0])).offer);
-  }finally{
-    if(old===undefined)delete process.env.DISCOVERY_STRATEGY;
-    else process.env.DISCOVERY_STRATEGY=old;
-  }
 });
 
 test('expanded discovery adds unique relevant observations without changing baseline path',async()=>{
@@ -54,7 +34,7 @@ test('expanded discovery adds unique relevant observations without changing base
   };
   const source={id:'bergfreunde',name:'Bergfreunde',country:'DE',baseUrl:'https://www.bergfreunde.de'};
   try{
-    delete process.env.DISCOVERY_STRATEGY;
+    process.env.DISCOVERY_STRATEGY='baseline';
     const baseline=await crawlSource(source);
     process.env.DISCOVERY_STRATEGY='expanded';
     const candidate=await crawlSource(source);
@@ -66,35 +46,5 @@ test('expanded discovery adds unique relevant observations without changing base
     globalThis.fetch=originalFetch;
     if(old===undefined) delete process.env.DISCOVERY_STRATEGY;
     else process.env.DISCOVERY_STRATEGY=old;
-  }
-});
-
-test('Bergzeit detail requires its own variant reference before replacing listing evidence',async()=>{
-  const oldFetch=globalThis.fetch,oldStrategy=process.env.DISCOVERY_STRATEGY;
-  const listing='https://www.bergzeit.de/herren/bekleidung/hosen/?filter.marke=Mammut';
-  const product='https://www.bergzeit.de/p/runbold/123456/';
-  const html=`<script type="application/ld+json">{"itemListElement":[{"url":"${product}"}]}</script>
-    <script>elementsList:[{"data":{"productId":"123456","brand":{"name":"Mammut"},"name":"Runbold Pants Men","price":{"current":"60,00 €","old":"120,00 €"}}}]</script>`;
-  const detail=`<script type="application/ld+json">{"@type":"Product","name":"Runbold Pants Men","brand":"Mammut",
-    "offers":{"@type":"Offer","price":"60.00","priceCurrency":"EUR","size":"L","originalPrice":"120.00","availability":"https://schema.org/InStock"}}</script>`;
-  const requested=[];
-  globalThis.fetch=async url=>{
-    const u=String(url);requested.push(u);
-    if(u.endsWith('/robots.txt'))return {ok:false,status:404};
-    if(u===listing)return {ok:true,status:200,text:async()=>html};
-    if(u===product)return {ok:true,status:200,text:async()=>detail};
-    return {ok:false,status:404};
-  };
-  process.env.DISCOVERY_STRATEGY='expanded';
-  try{
-    const result=await crawlSource({id:'bergzeit',name:'Bergzeit',country:'DE',baseUrl:'https://www.bergzeit.de'});
-    const matching=result.offers.filter(offer=>offer.url===product);
-    assert.ok(requested.includes(product));
-    assert.ok(matching.some(offer=>offer.rrpSource==='offer.originalPrice'&&offer.sizes.includes('L')));
-    assert.ok(matching.some(offer=>offer.sizeAvailability==='available'));
-  }finally{
-    globalThis.fetch=oldFetch;
-    if(oldStrategy===undefined)delete process.env.DISCOVERY_STRATEGY;
-    else process.env.DISCOVERY_STRATEGY=oldStrategy;
   }
 });

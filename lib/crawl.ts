@@ -78,7 +78,8 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
   const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
-  const expandedDiscovery=process.env.DISCOVERY_STRATEGY==='expanded';
+  const expandedDiscovery=process.env.DISCOVERY_STRATEGY==='expanded' ||
+    (process.env.DISCOVERY_STRATEGY!=='baseline' && source.id==='bergfreunde');
   const budgetRemaining=()=>Date.now()<deadline;
   const technicalPath:string[]=[]; const httpStatuses:number[]=[];
   let parseEmptyHttp200 = 0;
@@ -198,11 +199,8 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       // Listings do not establish that size L is actually buyable. Inspect a
       // bounded, broader set of eligible detail pages rather than assuming a
       // listing card's generic size labels apply to its discounted variant.
-      const candidateDiscount=(o:RawOffer)=>o.discountSource?Number(o.observedDiscountPct)||0:
-        expandedDiscovery && source.id==='bergzeit' && o.rrpSource && o.rrp && o.price?
-          (1-Number(o.price)/Number(o.rrp))*100:0;
-      const discounted=offers.filter(o=>productEligible(o.name,o.description) && candidateDiscount(o)>=40)
-        .sort((a,b)=>candidateDiscount(b)-candidateDiscount(a)).slice(0,8);
+      const discounted=offers.filter(o=>productEligible(o.name,o.description) && o.discountSource&&Number(o.observedDiscountPct)>=40)
+        .sort((a,b)=>Number(b.observedDiscountPct)-Number(a.observedDiscountPct)).slice(0,8);
       const detailOffers:RawOffer[]=[];
       for(const candidate of discounted){
         if(!budgetRemaining()) {technicalPath.push('source-budget-exhausted');break;}
@@ -215,12 +213,8 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
           const parsed=extractJsonLd(html,source,candidate.url);
           const variants=parsed.length?parsed:extractHtmlFallback(html,source,candidate.url);
           const samePrice=variants.filter(v=>Math.abs(Number(v.price)-Number(candidate.price))<0.011);
-          // A listing's old price must not be copied onto a different product
-          // variant. For Bergzeit, only the detail page's own reference counts.
-          const evidenced=source.id==='bergzeit' && candidate.rrpSource?
-            samePrice.filter(v=>v.rrpSource):samePrice.map(v=>v.rrpSource?v:{...v,
-              observedDiscountPct:candidate.observedDiscountPct,discountSource:'merchant:displayed-discount'});
-          detailOffers.push(...evidenced);
+          detailOffers.push(...samePrice.map(v=>v.rrpSource?v:{...v,
+            observedDiscountPct:candidate.observedDiscountPct,discountSource:'merchant:displayed-discount'}));
           if(samePrice.length) technicalPath.push('discount-detail-variant-validated');
         }catch{technicalPath.push('discount-product-detail-error');}
       }

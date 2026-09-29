@@ -78,7 +78,49 @@ target, not a claim that durable queues or browser sessions already exist.
 ## Stages
 
 1. Record a direct-only live baseline on a small fixed cohort in CI.
-2. Add bounded category pagination and better URL selection behind an explicit
-   strategy flag, then rerun both strategies in the same CI environment.
+2. Test bounded category pagination and price evidence behind explicit flags,
+   comparing both strategies in the same CI environment.
 3. Promote only improvements, run the full preflight and production deployment
    checks; keep browser-intensive work gated on a working Browserless token.
+
+## Test batch, 29 September 2026
+
+The four-shop direct-only comparison (no Browserless, OpenAI, database writes or
+email) used the same cohort and normalization code in consecutive CI steps.
+It is a controlled short-run comparison, not a statistical forecast for 91
+shops. A previous query-only pagination attempt yielded no change; public
+Bergfreunde listing links use `/2/`, which the second attempt recognized.
+
+| Metric, four shops | Baseline | Same-category pagination | Delta |
+| --- | ---: | ---: | ---: |
+| Raw observations | 486 | 489 | +3 |
+| Unique product URLs | 449 | 452 | +3 |
+| Relevant observations | 273 | 276 | +3 |
+| Discount/reference evidence | 120 | 123 | +3 |
+| Normalized observations | 103 | 106 | +3 |
+| Direct network requests | 131 | 136 | +5 |
+
+All three new observations were Bergfreunde products; the other three shops
+were unchanged. The bounded pagination is enabled for Bergfreunde by default.
+It is not a significant fleet-wide improvement and must not be described as
+such. The daily production snapshot before this change was 1,619 raw offers,
+88 normalized offers and two published deals across 91 shops; it is not
+directly comparable to the isolated test because timing, shipping verification
+and publication selection differ.
+
+A separate Bergzeit evidence pilot found 29 raw offers with an old price in
+merchant listing state. Explicit provenance converted 26 into normalized
+offers, six above 40%, but zero had confirmed purchasable size and zero were
+fully qualified. Six bounded detail-page requests did not resolve size
+evidence. Therefore the old-price promotion was **not** enabled in production:
+it would add uncertain near misses without improving the email's confirmed
+deals. For 4camping, 174 raw observations had zero verified price evidence;
+127 failed allowed-brand identification and 47 the discount-evidence check.
+
+Next high-leverage work is merchant/affiliate feed onboarding, variant-aware
+detail adapters with real availability, and a token-validated Browserless
+pilot on a few otherwise empty shops. Each needs a separate bounded A/B test.
+An invalid Browserless credential now opens a function-scoped circuit after
+one provider 401, preventing the same bad token from being retried across
+shops in that invocation; this does not substitute for correcting the token
+or for a durable cross-invocation unit ledger.
