@@ -113,6 +113,10 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('browser-provider-rate-limited');
         break;
       }
+      if(result.steps?.includes('browser-daily-limit-exhausted')) {
+        technicalPath.push('browser-daily-limit-exhausted');
+        break;
+      }
       if(result.steps?.includes('provider-auth-rejected') || result.steps?.includes('provider-auth-circuit-open')){
         technicalPath.push('browser-provider-auth-rejected');
         break;

@@ -30,7 +30,7 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - explicit incompatible evidence excludes; missing optional evidence does not
 - target size W33/L32, W34/L32 acceptable; never > L32
 - no rain/hardshell, winter/ski, zip-off, heavy alpine or loud designs
-- confirmed deals require verified same-variant reference price, known shipping and purchasable W33/W34 with L32 maximum; otherwise review candidate
+- Rabatt-Deals require verified same-variant prior/reference price or explicit merchant discount, allowed brand/category and at least 40% discount. Missing size, shipping and returns are disclosed but do not exclude. Explicitly incompatible available sizes, sold-out items and excluded categories still do.
 - deal qualification and scoring are deterministic TypeScript rules
 - Mammut men's category is targeted; product cards are discovery data and carry no invented UVP
 
@@ -61,6 +61,7 @@ Never commit values. Supported names:
 - `BROWSERLESS_UNBLOCK=false` to disable unblock
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
+- `BROWSERLESS_DAILY_SESSION_LIMIT` (default 24 session admissions per UTC day across all batches; `0` disables paid escalation). A database-backed atomic counter gates REST attempts and CDP connections, including retries. This is not a precise Browserless billed-unit meter; inspect the account's actual unit usage.
 
 Optional bounded LLM extraction pilot (off unless enabled):
 

@@ -38,6 +38,20 @@ test('Stoic listing discovers the brand and records only an explicit discount ba
   assert.equal(offers[0].rrp,undefined);
 });
 
+test('Bergzeit paired old/current price qualifies without inventing a size',async()=>{
+  const product='https://www.bergzeit.de/p/runbold/123456/';
+  const html=`<script type="application/ld+json">{"itemListElement":[{"url":"${product}"}]}</script>
+    <script>elementsList:[{"data":{"productId":"123456","brand":{"name":"Mammut"},"name":"Runbold Pants Men","price":{"current":"60,00 €","old":"120,00 €"}}}]</script>`;
+  const offers=extractTargetedListing(html,{id:'bergzeit',name:'Bergzeit',country:'DE'},
+    'https://www.bergzeit.de/herren/bekleidung/hosen/');
+  assert.equal(offers.length,1);
+  assert.equal(offers[0].rrpSource,'merchant:listing-old-price');
+  assert.deepEqual(offers[0].sizes,[]);
+  const normalized=await normalizeOffer(offers[0]);
+  assert.equal(normalized?.sizeFit,'unconfirmed');
+  assert.ok(normalized?.rrpVerified);
+});
+
 test('men’s sale discovery includes broad outdoor and softshell categories before brand pages',()=>{
   const urls=targetedListingUrls({id:'bergfreunde',baseUrl:'https://www.bergfreunde.de'});
   assert.deepEqual(urls.slice(0,3),[

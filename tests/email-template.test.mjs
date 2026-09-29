@@ -35,3 +35,17 @@ test('mail content escapes shop data and rejects unsafe image links', () => {
   assert.ok(!html.includes('javascript:'));
   assert.match(html, /nicht verifiziert – im Shop prüfen/);
 });
+
+test('mail keeps thumbnails and summary for deals with unknown size and extra costs',()=>{
+  const offer={brand:'Mammut',name:'Herren Wanderhose',merchant:'Bergzeit',imageUrl:'https://img.example/pants.jpg',
+    url:'https://shop.example/pants',effectiveCostEur:60,priceEur:60,rrpEur:120,effectiveDiscountPct:50,
+    sizeFit:'unconfirmed',sizes:[],shippingKnown:false,shippingEur:0,returnCostEur:null,class:'Strong Deal',score:70};
+  const report={startedAt:'2026-09-29T00:00:00Z',finishedAt:'2026-09-29T04:00:00Z',plannedSources:1,
+    attemptedSources:1,success:1,partial:0,browser:0,blocked:0,failed:0,rawOffers:29,normalizedOffers:26,
+    confirmedSizeOffers:0,coverage:[]};
+  const html=renderRunEmail('2026-09-29',[offer],[],report);
+  assert.match(html,/Zusammenfassung:.*Rohangebote 29.*Deals 1/);
+  assert.match(html,/img\.example\/pants\.jpg/);
+  assert.match(html,/nicht verifiziert – im Shop prüfen/);
+  assert.match(html,/zzgl\. ggf\. ungeklärter Versand-\/Retourenkosten/);
+});

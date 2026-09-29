@@ -2,6 +2,7 @@ import { RawOffer, ShopSource } from './types';
 import { extractHtmlFallback, extractJsonLd } from './extract';
 import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
+import { reserveBrowserSession } from './browser-budget';
 import pLimit from 'p-limit';
 
 // A batch runs several shops concurrently. Keep its Browserless sessions serial
@@ -111,7 +112,9 @@ function playwrightErrorCode(error: unknown): string {
 async function browserlessRequest(url: string, init: RequestInit, deadline: number) {
   let retried = false;
   for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(requireTime(deadline, 18000)) });
+    const requestTimeout = requireTime(deadline, 18000);
+    if (!await reserveBrowserSession()) throw new Error('browser-daily-limit-exhausted');
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(requestTimeout) });
     if (response.status !== 429 || attempt || timeLeft(deadline, 5000) < 3500) return { response, retried };
     // One bounded retry for temporary provider saturation. Never retry a shop's
     // 403, and never flood Browserless with repeated 429 requests.
@@ -153,7 +156,7 @@ async function contentRequest(source: ShopSource, url: string, deadline: number)
     };
   } catch (error) {
     return { offers: [], mode: 'content', elapsedMs: Date.now() - started,
-      steps: [error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'content-error'] };
+      steps: [error instanceof Error && /^(browser-budget-exhausted|browser-daily-limit-exhausted)$/.test(error.message) ? error.message : 'content-error'] };
   }
 }
 
@@ -188,7 +191,7 @@ async function unblockContentRequest(source: ShopSource, url: string, deadline: 
     };
   } catch (error) {
     return { offers: [], mode: 'unblock', elapsedMs: Date.now() - started,
-      steps: [error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : 'unblock-content-error'] };
+      steps: [error instanceof Error && /^(browser-budget-exhausted|browser-daily-limit-exhausted)$/.test(error.message) ? error.message : 'unblock-content-error'] };
   }
 }
 
@@ -220,7 +223,8 @@ async function unblockSessionRequest(url: string, deadline: number): Promise<Unb
       httpStatus: response.status,
       elapsedMs: Date.now() - started,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === 'browser-daily-limit-exhausted') throw error;
     return { endpoint: null, elapsedMs: Date.now() - started };
   }
 }
@@ -354,7 +358,9 @@ async function playwrightFromEndpoint(
   try {
     const { chromium } = await import('playwright-core');
     phase = 'cdp-connect';
-    browser = await chromium.connectOverCDP(endpoint, { timeout: requireTime(options.deadline, 10000) });
+    const connectTimeout = requireTime(options.deadline, 10000);
+    if (!await reserveBrowserSession()) throw new Error('browser-daily-limit-exhausted');
+    browser = await chromium.connectOverCDP(endpoint, { timeout: connectTimeout });
     phase = 'context';
     const context = browser.contexts()[0];
     if (!context) return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: [...options.steps, 'no-context'] };
@@ -381,7 +387,7 @@ async function playwrightFromEndpoint(
       steps: [...options.steps, offers.length ? 'playwright-extracted' : 'playwright-empty'],
     };
   } catch (error) {
-    const code = error instanceof Error && error.message === 'browser-budget-exhausted' ? 'browser-budget-exhausted' : playwrightErrorCode(error);
+    const code = error instanceof Error && /^(browser-budget-exhausted|browser-daily-limit-exhausted)$/.test(error.message) ? error.message : playwrightErrorCode(error);
     console.info(JSON.stringify({ event: 'playwright-attempt', sourceId: source.id, phase, code, elapsedMs: Date.now() - started }));
     return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started,
       steps: [...options.steps, `playwright-phase-${phase}`, code] };
@@ -404,7 +410,9 @@ async function freshPlaywrightRequest(source: ShopSource, url: string, stealth: 
 
 async function unblockedPlaywrightRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
   const started = Date.now();
-  const session = await unblockSessionRequest(url, deadline);
+  let session: UnblockSessionResult;
+  try { session = await unblockSessionRequest(url, deadline); }
+  catch { return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: ['browser-daily-limit-exhausted'] }; }
   if (!session.endpoint) {
     return {
       offers: [], mode: 'playwright', httpStatus: session.httpStatus,
@@ -438,6 +446,7 @@ async function browserExtractOnce(
   const record = (result: BrowserFallbackResult) => { attempts.push(result); return result.offers.length > 0; };
   const providerLimited = (result: BrowserFallbackResult) => result.httpStatus === 429 ||
     result.steps?.includes('playwright-provider-rate-limited');
+  const dailyLimited = (result: BrowserFallbackResult) => result.steps?.includes('browser-daily-limit-exhausted');
   const providerAuthRejected = (result: BrowserFallbackResult) => {
     const rejected=result.httpStatus===401 || result.steps?.includes('playwright-provider-auth-error');
     if(rejected && credentialEndpoint) rejectedCredentialEndpoint=credentialEndpoint;
@@ -481,18 +490,21 @@ async function browserExtractOnce(
   if (blocked) {
     const unblock = await unblockContentRequest(source, url, deadline);
     if (record(unblock)) return done(unblock);
+    if (dailyLimited(unblock)) return done(unblock);
     if (providerAuthRejected(unblock)) return done({ ...unblock, steps: ['provider-auth-rejected'] });
     if (providerLimited(unblock)) return done({ ...unblock, steps: ['provider-rate-limited'] });
 
     if (canTry() && browserPlaywrightConfigured()) {
       const handoff = await unblockedPlaywrightRequest(source, url, deadline);
       if (record(handoff)) return done(handoff);
+      if (dailyLimited(handoff)) return done(handoff);
       if (providerAuthRejected(handoff)) return done({ ...handoff, steps: ['provider-auth-rejected'] });
       if (providerLimited(handoff)) return done({ ...handoff, steps: ['provider-rate-limited'] });
 
       if (canTry()) {
         const stealth = await freshPlaywrightRequest(source, url, true, deadline);
         if (record(stealth)) return done(stealth);
+        if (dailyLimited(stealth)) return done(stealth);
         if (providerAuthRejected(stealth)) return done({ ...stealth, steps: ['provider-auth-rejected'] });
         if (providerLimited(stealth)) return done({ ...stealth, steps: ['provider-rate-limited'] });
       }
@@ -501,6 +513,7 @@ async function browserExtractOnce(
     if (canTry()) {
       const content = await contentRequest(source, url, deadline);
       if (record(content)) return done(content);
+      if (dailyLimited(content)) return done(content);
       if (providerAuthRejected(content)) return done({ ...content, steps: ['provider-auth-rejected'] });
       if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
     }
@@ -514,12 +527,14 @@ async function browserExtractOnce(
 
   const content = await contentRequest(source, url, deadline);
   if (record(content)) return done(content);
+  if (dailyLimited(content)) return done(content);
   if (providerAuthRejected(content)) return done({ ...content, steps: ['provider-auth-rejected'] });
   if (providerLimited(content)) return done({ ...content, steps: ['provider-rate-limited'] });
 
   if (canTry() && browserPlaywrightConfigured()) {
     const playwright = await freshPlaywrightRequest(source, url, false, deadline);
     if (record(playwright)) return done(playwright);
+    if (dailyLimited(playwright)) return done(playwright);
     if (providerAuthRejected(playwright)) return done({ ...playwright, steps: ['provider-auth-rejected'] });
     if (providerLimited(playwright)) return done({ ...playwright, steps: ['provider-rate-limited'] });
     const llmOffers = await tryLlmFallback();

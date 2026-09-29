@@ -44,6 +44,13 @@ test('legacy content URL remains supported without Playwright', () => {
   assert.equal(cfg.usePlaywright, false);
 });
 
+test('Cloud token takes precedence over a stale legacy content-only URL', () => {
+  const cfg = browserFallbackConfig({ BROWSERLESS_API_TOKEN: 'secret', BROWSERLESS_CONTENT_URL: 'https://example.test/content?token=old' });
+  assert.equal(cfg.mode, 'browserless-cloud');
+  assert.equal(cfg.usePlaywright, true);
+  assert.equal(new URL(cfg.playwrightUrl).host, 'production-ams.browserless.io');
+});
+
 test('unblock and Playwright can be disabled explicitly', () => {
   const cfg = browserFallbackConfig({
     BROWSERLESS_API_TOKEN: 'secret',

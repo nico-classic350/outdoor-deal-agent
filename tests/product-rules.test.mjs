@@ -46,7 +46,7 @@ test('deal tier depends on discount and product fit, not whether size data is re
   assert.equal(dealTier(58, 60), 'Strong Deal');
   assert.equal(dealTier(47, 55), 'Strong Deal');
   assert.equal(dealTier(42, 80), 'Good Deal');
-  assert.equal(dealTier(42, 60), 'Near Miss');
+  assert.equal(dealTier(42, 60), 'Good Deal');
 });
 
 test('same product URL is one candidate despite card titles and tracking parameters', () => {
@@ -76,12 +76,13 @@ test('one model occupies one deal slot across colours, sizes and affiliate links
   assert.equal(result.near.length,0);
 });
 
-test('an unknown size remains a review candidate, explicit incompatible sizes are excluded', () => {
+test('unknown size and shipping do not suppress a proven 40% deal', () => {
   const base = { sourceId: 'bergzeit', brand: 'Haglöfs', name: 'Herren Korp Lite Hose',
     url: 'https://www.bergzeit.de/p/korp/1/', sizeFit: 'unconfirmed', class: 'Near Miss',
     effectiveDiscountPct: 54, effectiveCostEur: 54, productFitScore: 65, score: 58 };
-  assert.equal(selectOffers([{...base,shippingKnown:true,rrpVerified:true}]).deals.length, 0);
-  assert.match(selectOffers([{...base,shippingKnown:true,rrpVerified:true}]).near[0].reason,/Größe/);
+  assert.equal(selectOffers([{...base,shippingKnown:false,rrpVerified:true}]).deals.length, 1);
+  assert.equal(selectOffers([{...base,shippingKnown:false,rrpVerified:true}]).near.length, 0);
+  assert.equal(selectOffers([{...base,shippingKnown:false,rrpVerified:false}]).deals.length, 0);
 
   const explicitNo = { ...base, sizeFit: 'no', score: 30 };
   assert.equal(selectOffers([explicitNo]).deals.length, 0);
@@ -97,13 +98,14 @@ test('sixth qualifying deal is not relabeled as a near miss', () => {
   assert.equal(result.near.length,0);
 });
 
-test('uncertain sizes remain visible beyond the old three-candidate ceiling', () => {
+test('uncertain sizes qualify while only the five highest ranked appear as deals', () => {
   const offers=Array.from({length:8},(_,i)=>({sourceId:'x',brand:'Stoic',name:'Herren Wanderhose',
     url:`https://example.org/p/${i}`,sizeFit:'unconfirmed',shippingKnown:false,discountVerified:true,
     effectiveDiscountPct:58,effectiveCostEur:65,productFitScore:80,score:80-i}));
   const result=selectOffers(offers);
-  assert.equal(result.deals.length,0);
-  assert.equal(result.near.length,8);
+  assert.equal(result.deals.length,5);
+  assert.equal(result.qualifiedCount,8);
+  assert.equal(result.near.length,0);
 });
 
 test('a cheaper unverified variant does not hide a verified variant at the same URL', () => {
