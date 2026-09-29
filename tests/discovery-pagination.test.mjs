@@ -68,3 +68,33 @@ test('expanded discovery adds unique relevant observations without changing base
     else process.env.DISCOVERY_STRATEGY=old;
   }
 });
+
+test('Bergzeit detail requires its own variant reference before replacing listing evidence',async()=>{
+  const oldFetch=globalThis.fetch,oldStrategy=process.env.DISCOVERY_STRATEGY;
+  const listing='https://www.bergzeit.de/herren/bekleidung/hosen/?filter.marke=Mammut';
+  const product='https://www.bergzeit.de/p/runbold/123456/';
+  const html=`<script type="application/ld+json">{"itemListElement":[{"url":"${product}"}]}</script>
+    <script>elementsList:[{"data":{"productId":"123456","brand":{"name":"Mammut"},"name":"Runbold Pants Men","price":{"current":"60,00 €","old":"120,00 €"}}}]</script>`;
+  const detail=`<script type="application/ld+json">{"@type":"Product","name":"Runbold Pants Men","brand":"Mammut",
+    "offers":{"@type":"Offer","price":"60.00","priceCurrency":"EUR","size":"L","originalPrice":"120.00","availability":"https://schema.org/InStock"}}</script>`;
+  const requested=[];
+  globalThis.fetch=async url=>{
+    const u=String(url);requested.push(u);
+    if(u.endsWith('/robots.txt'))return {ok:false,status:404};
+    if(u===listing)return {ok:true,status:200,text:async()=>html};
+    if(u===product)return {ok:true,status:200,text:async()=>detail};
+    return {ok:false,status:404};
+  };
+  process.env.DISCOVERY_STRATEGY='expanded';
+  try{
+    const result=await crawlSource({id:'bergzeit',name:'Bergzeit',country:'DE',baseUrl:'https://www.bergzeit.de'});
+    const matching=result.offers.filter(offer=>offer.url===product);
+    assert.ok(requested.includes(product));
+    assert.ok(matching.some(offer=>offer.rrpSource==='offer.originalPrice'&&offer.sizes.includes('L')));
+    assert.ok(matching.some(offer=>offer.sizeAvailability==='available'));
+  }finally{
+    globalThis.fetch=oldFetch;
+    if(oldStrategy===undefined)delete process.env.DISCOVERY_STRATEGY;
+    else process.env.DISCOVERY_STRATEGY=oldStrategy;
+  }
+});
