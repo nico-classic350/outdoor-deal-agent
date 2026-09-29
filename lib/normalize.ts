@@ -33,7 +33,9 @@ export async function normalizeOfferChecked(o:RawOffer):Promise<{offer:Normalize
   const color=(o.color||'').toLowerCase();
   if(/white|weiß|weiss|blanc|bianco|neon|fluorescen|knall/i.test(color)) return {offer:null,reason:'excluded-color'};
   const colorBonus=/navy|dark blue|light blue|blue|black|schwarz|blau|grey|gray|grau/i.test(color)?5:0;
-  const fit=Math.min(100,productFitScore(o.name,o.description)+colorBonus); if(fit<45) return {offer:null,reason:'low-product-fit'};
+  // Category suitability is decided above; fit ranks eligible trousers rather
+  // than silently excluding a genuine outdoor/trekking/softshell product.
+  const fit=Math.min(100,productFitScore(o.name,o.description)+colorBonus);
   const sizeFit=inferSizeFit(o.sizes); if(sizeFit==='no') return {offer:null,reason:'incompatible-size'};
   const priceEur=await eurValue(o.price,o.currency), rrpEur=rrp?await eurValue(rrp,o.currency):null;
   const shippingKnown=o.shipping!=null;

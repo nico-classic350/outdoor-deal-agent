@@ -17,7 +17,7 @@ Source acquisition order is: official product feed/API where available, Awin pro
 ## Deal quality gates
 
 - Only eligible men's long outdoor trousers enter the shortlist; ski, winter, rain, zip-off, shorts and tights are rejected.
-- A confirmed deal requires a reference price tied to the same variant, known shipping to Germany and a confirmed purchasable target size. Uncertain products remain review candidates.
+- A Rabatt-Deal requires the allowed brand/category and at least 40% discount supported by a same-variant merchant price pair or explicit merchant discount. Missing size, shipping or return information remains visible for checking at checkout, but no longer excludes a deal. Explicit incompatible sizes and sold-out products still fail.
 - Offers with the same merchant and canonical product URL are collapsed.
 - Listing cards are discovery evidence; live size availability is only confirmed from explicit available variant data. A generic list of size labels is never sufficient.
 - Market-price scoring is disabled until comparable product evidence is available. A neutral market score is never invented.
@@ -78,6 +78,7 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 ## Browserless fallback
 
 Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The default endpoint is the Amsterdam Browserless Cloud region (`https://production-ams.browserless.io`) and can be overridden with `BROWSERLESS_BASE_URL`.
+For the existing `playwright-core` CDP connection the WebSocket URL is `wss://production-ams.browserless.io?token=…`; the `/chromium/playwright` path is for the native Playwright protocol (`connect()`), not `connectOverCDP()`. Never log either URL with its credential. `BROWSERLESS_DAILY_SESSION_LIMIT` defaults to 24 provider session admissions per UTC day across all batches; `0` disables paid escalation. The database-backed counter counts REST attempts and CDP connections, not actual billed Browserless units, so monitor usage in Browserless.
 
 - `/content` renders JavaScript-heavy pages and returns HTML for the JSON-LD/HTML extractors.
 - `/unblock` handles direct 403/429 responses.
@@ -87,7 +88,7 @@ Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The d
 - `BROWSERLESS_PROXY` can optionally be set for especially protected shops, but is intentionally empty by default because proxy traffic consumes additional units.
 - A Browserless `429` stops further Browserless calls for that shop in the current crawl. Coverage records `browser-provider-rate-limited`; remote Playwright connection failures are classified without exposing token-bearing URLs. A later scheduled run can retry after provider capacity is available.
 - `BROWSERLESS_UNBLOCK=false` or `BROWSERLESS_PLAYWRIGHT=false` can disable either escalation layer independently.
-- The legacy `BROWSERLESS_CONTENT_URL` remains supported and takes precedence if present.
+- The legacy `BROWSERLESS_CONTENT_URL` remains supported only when no Cloud token is present; a configured Cloud token takes precedence so an old content-only URL cannot silently disable Playwright.
 
 ## Optional integrations
 

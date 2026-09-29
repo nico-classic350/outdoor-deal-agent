@@ -3,9 +3,10 @@
 ## Goal and guardrails
 
 Maximize unique, relevant product observations per shop, not duplicate cards or
-unrelated homepage products. Preserve the 40% effective-discount threshold,
-variant-level price/size evidence, source-domain and robots checks, and the
-mandatory daily email. Never treat an unverified reference price as a deal.
+unrelated homepage products. Preserve the 40% discount threshold,
+variant-level price evidence, source-domain and robots checks, and the
+mandatory daily email. Missing size, shipping or return information is a
+visible uncertainty, not a reason to exclude a deal.
 
 ## Data flow
 
@@ -18,14 +19,15 @@ mandatory daily email. Never treat an unverified reference price as a deal.
    state. Follow a bounded number of same-category pagination links. Collect
    product URLs, current prices and explicit discount evidence separately.
 4. **Selective verification**: fetch high-discount product details, keep each
-   price and reference tied to its exact variant, verify stock and delivery.
+   price and reference tied to its exact variant; stock, size and delivery are
+   enriched where possible without treating absent metadata as a veto.
 5. **Browser escalation**: only when a relevant high-yield page needs rendering
    or a direct request is blocked. Reuse one session for bounded scrolling and
    pagination where the provider permits it. Stop on provider 401/429, enforce
-   a per-day unit budget, and retain robots/domain restrictions. No CAPTCHA or
+   a per-day provider-session admission cap, and retain robots/domain restrictions. No CAPTCHA or
    authenticated-account bypass.
 6. **Normalization and publication**: store rejection reasons, canonicalize
-   product models and retain only validated deals; delivery stays mandatory.
+   product models and retain only evidenced discounts; email delivery stays mandatory.
 
 ## Clean-slate design
 
@@ -111,10 +113,12 @@ and publication selection differ.
 A separate Bergzeit evidence pilot found 29 raw offers with an old price in
 merchant listing state. Explicit provenance converted 26 into normalized
 offers, six above 40%, but zero had confirmed purchasable size and zero were
-fully qualified. Six bounded detail-page requests did not resolve size
-evidence. Therefore the old-price promotion was **not** enabled in production:
-it would add uncertain near misses without improving the email's confirmed
-deals. For 4camping, 174 raw observations had zero verified price evidence;
+fully qualified under the then-current rule. Six bounded detail-page requests
+did not resolve size evidence. The user's revised rule allows those six
+discounted candidates to qualify while displaying the missing size and costs.
+The old/current price promotion is now enabled only when the same merchant
+listing record pairs both fields. This historical pilot is not a new live
+measurement. For 4camping, 174 raw observations had zero verified price evidence;
 127 failed allowed-brand identification and 47 the discount-evidence check.
 
 Next high-leverage work is merchant/affiliate feed onboarding, variant-aware
@@ -122,5 +126,23 @@ detail adapters with real availability, and a token-validated Browserless
 pilot on a few otherwise empty shops. Each needs a separate bounded A/B test.
 An invalid Browserless credential now opens a function-scoped circuit after
 one provider 401, preventing the same bad token from being retried across
-shops in that invocation; this does not substitute for correcting the token
-or for a durable cross-invocation unit ledger.
+shops in that invocation. A database-backed UTC-day session-admission counter
+now limits provider calls across independent invocations (default 24). It
+counts REST attempts and CDP connections conservatively, not the exact billed
+Browserless units. A live token-validating pilot remains to be run after the
+Production environment is confirmed deployed; no token value is logged.
+
+## Relaxed-rule pilot, 29 September 2026
+
+A read-only direct HTTP test batch of Bergzeit ran with Browserless and LLM
+credentials deliberately unset, no Neon writes and no mail. It produced 27
+raw observations (27 distinct URLs), 24 relevant and normalized trousers, and
+six candidates above 40% with paired merchant old/current price evidence.
+None of the 24 normalized offers had confirmed size. The prior size-required
+rule would therefore publish zero of the six; the revised rule qualifies six
+before the five-slot daily presentation cap. This compares the rule on one
+current dataset, not two independent live crawls. The observed crawl had 19
+direct requests, four request errors and HTTP 200/502, so the previous
+29-offer pilot is not an exact same-time A/B baseline. Browserless did not
+run, and the refreshed production credential's validity is not inferred from
+this result.

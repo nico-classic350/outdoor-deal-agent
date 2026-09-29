@@ -25,13 +25,13 @@ function change(value:number|null){return value===null?'—':`${value>0?'+':''}$
 function DealCard({offer,history,saved,toggle}:{offer:NormalizedOffer;history:History;saved:boolean;toggle:()=>void}){
   const points=history[key(offer)]||[];
   const earlier=points.length>1?points[0].price:null;
-  const secure=(offer.rrpVerified||offer.discountVerified)&&offer.shippingKnown&&offer.sizeFit==='confirmed';
+  const secure=offer.sizeFit==='confirmed';
   return <article className="deal-card">
     <div className="card-header"><div className="eyebrow">{offer.brand} · {offer.merchant}</div>
       <button className="save" type="button" onClick={toggle} aria-label={saved?'Aus Merkliste entfernen':'Auf Merkliste setzen'} aria-pressed={saved}>{saved?'★':'☆'}</button></div>
     <h3>{offer.name}</h3><p className="subline">{offer.color||'Farbe nicht angegeben'} · {offer.merchantCountry}</p>
     <div className="price-row"><strong>{euro(offer.effectiveCostEur)}</strong><span className="discount">−{Math.round(offer.effectiveDiscountPct)} %</span></div>
-    <p className="subline">{offer.shippingKnown?'Gesamtpreis inklusive bekannter Versandkosten':'Versandkosten noch ungeklärt'} · Referenzpreis {offer.rrpEur==null?'nicht angegeben':euro(offer.rrpEur)}</p>
+    <p className="subline">{offer.shippingKnown?'Bekannte Versandkosten eingerechnet':'Versandkosten noch ungeklärt'} · {offer.returnCostEur==null?'Retourenkosten ungeklärt':'Retourenkosten eingerechnet'} · Früherer/Referenzpreis {offer.rrpEur==null?'nicht angegeben':euro(offer.rrpEur)}</p>
     <div className="badges"><span className={secure?'badge good':'badge warn'}>{offer.sizeFit==='confirmed'?'Größe kaufbar bestätigt':'Größe prüfen'}</span>
       <span className={offer.rrpVerified||offer.discountVerified?'badge good':'badge warn'}>{offer.rrpVerified?'Referenzpreis belegt':offer.discountVerified?'Händler-Rabattangabe belegt':'UVP prüfen'}</span></div>
     {offer.reason?<p className="reason">{offer.reason}</p>:null}
@@ -58,8 +58,8 @@ export function DealDashboard({deals,near,report,history,emailStatus}:Props){
     <header className="hero"><div className="hero-top"><span className="brand-mark">OD<span>·</span>W</span><span className="hero-label">PERSÖNLICHE ANGEBOTSSUCHE</span></div>
       <div className="hero-grid"><div><p className="overline">LEICHTE TREKKINGHOSEN · W33–34 / MAX. L32</p>
         <h1>Weniger Treffer.<br/><em>Mehr Gewissheit.</em></h1>
-        <p className="lead">Angebote mit nachvollziehbarem Preis, passender Größe und sichtbarer Quellenlage.</p></div>
-        <div className="hero-stat"><strong>{deals.length.toString().padStart(2,'0')}</strong><span>bestätigte Deals</span><small>{report?`Letzter Lauf ${date(report.finishedAt)}`:'Noch kein abgeschlossener Suchlauf'}</small></div></div>
+        <p className="lead">Angebote mit belegtem Rabatt und passender Kategorie. Größe und Nebenkosten bleiben transparent zur Prüfung im Shop.</p></div>
+        <div className="hero-stat"><strong>{deals.length.toString().padStart(2,'0')}</strong><span>Rabatt-Deals</span><small>{report?`Letzter Lauf ${date(report.finishedAt)}`:'Noch kein abgeschlossener Suchlauf'}</small></div></div>
     </header>
     <section className="summary" aria-label="Suchstatus"><div><span>QUELLEN</span><strong>{report?`${report.attemptedSources} / ${report.plannedSources}`:'—'}</strong></div>
       <div><span>PRODUKTE</span><strong>{report?.normalizedOffers??'—'}</strong></div>
@@ -68,12 +68,12 @@ export function DealDashboard({deals,near,report,history,emailStatus}:Props){
         ? emailStatus==='sent'?'Vollständig':'E-Mail ausstehend' : 'Ausstehend'}</strong></div></section>
     <section className="results"><div className="section-heading"><div><p className="overline dark">DEINE AUSWAHL</p><h2>Fundstücke</h2></div>
       <p>Nur Neuware und passende lange Hosen. Einige unklare Preis- oder Größenangaben bleiben als Prüfkandidaten sichtbar.</p></div>
-      <nav className="tabs" aria-label="Ergebnisse"><button aria-current={tab==='deals'?'page':undefined} onClick={()=>setTab('deals')}>Bestätigte Deals <span>{deals.length}</span></button>
+      <nav className="tabs" aria-label="Ergebnisse"><button aria-current={tab==='deals'?'page':undefined} onClick={()=>setTab('deals')}>Rabatt-Deals <span>{deals.length}</span></button>
         <button aria-current={tab==='near'?'page':undefined} onClick={()=>setTab('near')}>Prüfkandidaten <span>{near.length}</span></button>
         <button aria-current={tab==='saved'?'page':undefined} onClick={()=>setTab('saved')}>Merkliste <span>{saved.length}</span></button></nav>
       {list.length?<div className="card-grid">{list.map(o=><DealCard key={key(o)} offer={o} history={history} saved={saved.includes(key(o))} toggle={()=>toggle(o)}/>)}</div>
-        :<div className="empty"><strong>{tab==='deals'?'Heute kein bestätigter Deal.':tab==='near'?'Keine Prüfkandidaten.':'Noch nichts gemerkt.'}</strong>
-          <p>{tab==='deals'?'Die Prüfung verlangt eine kaufbare Größe, belegten Referenzpreis und geklärte Versandkosten.':'Neue Ergebnisse erscheinen nach dem nächsten vollständigen Suchlauf.'}</p></div>}
+        :<div className="empty"><strong>{tab==='deals'?'Heute kein ausreichend belegter Rabatt-Deal.':tab==='near'?'Keine Prüfkandidaten.':'Noch nichts gemerkt.'}</strong>
+          <p>{tab==='deals'?'Die Prüfung verlangt passende Marke/Kategorie und belegte mindestens 40 % Rabatt; offene Größe und Nebenkosten werden separat angezeigt.':'Neue Ergebnisse erscheinen nach dem nächsten vollständigen Suchlauf.'}</p></div>}
     </section>
     {report?.comparison?<section className="coverage-delta" aria-label="Änderung zum letzten Bericht">
       <div className="section-heading"><div><p className="overline dark">WIRKUNG DER SUCHE</p><h2>Was hat sich verändert?</h2></div>
@@ -82,7 +82,7 @@ export function DealDashboard({deals,near,report,history,emailStatus}:Props){
         ['Shops erreicht','reachedSources'],['Shops mit Produkten','sourcesWithProducts'],['Rohangebote','rawOffers'],
         ['Browser brachte Produkte','browserRecoveredSources'],['Browserdienst limitiert','browserProviderLimitedSources'],
         ['Verwertbare Angebote','normalizedOffers'],['Größe bestätigt','confirmedSizeOffers'],
-        ['Bestätigte Deals','qualifiedDeals'],['Prüfkandidaten','nearMisses'],['Blockiert','blocked'],['Fehlgeschlagen','failed']
+        ['Rabatt-Deals','qualifiedDeals'],['Prüfkandidaten','nearMisses'],['Blockiert','blocked'],['Fehlgeschlagen','failed']
       ].map(([label,key])=>{const metric=report.comparison!.metrics.find(m=>m.metric===key);
         return metric?<div key={key}><span>{label}</span><strong>{metric.previous??'—'} → {metric.current}</strong>
           <small>{change(metric.delta)}</small></div>:null})}</div>

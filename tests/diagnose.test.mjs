@@ -24,7 +24,7 @@ test('unrecovered block remains a block', () => {
 
 test('a verified merchant discount is not misdiagnosed as a missing reference price', () => {
   assert.equal(diagnoseCoverage({ status: 'success', parsedOffers: 124, eligibleOffers: 75,
-    pricedOffers: 45, verifiedReferenceOffers: 0, availableSizeOffers: 0 }), 'size-unverified');
+    pricedOffers: 45, verifiedReferenceOffers: 0, availableSizeOffers: 0 }), 'no-qualified-deal');
 });
 
 test('price evidence can exist even when a later selection rule rejects every product', () => {

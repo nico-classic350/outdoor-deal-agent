@@ -8,7 +8,6 @@ export function diagnoseCoverage(c:SourceCoverage):SourceCoverage['diagnosticCod
   // The raw price-evidence count must not be confused with fully normalized offers.
   if(!(c.priceEvidenceOffers??c.pricedOffers))return 'no-reference-price';
   if(!c.pricedOffers)return 'selection-filtered';
-  if(!c.availableSizeOffers)return 'size-unverified';
   if(!c.qualifiedOffers)return 'no-qualified-deal';
   return undefined;
 }

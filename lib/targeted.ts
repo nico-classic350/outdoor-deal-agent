@@ -150,7 +150,8 @@ function extractBergzeitState(html:string, source:ShopSource):RawOffer[]{
     const url=info.url;
     out.push({
       sourceId:source.id,merchant:source.name,merchantCountry:source.country,
-      url,imageUrl:image,brand,name,sizes,currency:'EUR',price,rrp:Math.max(old,price),
+      url,imageUrl:image,brand,name,sizes,currency:'EUR',price,rrp:old>price?old:undefined,
+      rrpSource:old>price?'merchant:listing-old-price':undefined,
       availability:'unknown',description:desc || info?.description
     });
   }
