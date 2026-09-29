@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   direct-baseline:
-    if: github.event.pull_request.draft == false && startsWith(github.head_ref, 'feat/high-yield-discovery-')
+    if: startsWith(github.head_ref, 'feat/high-yield-discovery-')
     runs-on: ubuntu-latest
     timeout-minutes: 9
     steps:
