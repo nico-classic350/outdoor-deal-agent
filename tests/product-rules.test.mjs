@@ -59,6 +59,23 @@ test('same product URL is one candidate despite card titles and tracking paramet
   assert.equal(near.length, 0);
 });
 
+test('one model occupies one deal slot across colours, sizes and affiliate links', () => {
+  const base={sourceId:'bergfreunde',brand:'Stoic',name:'Stoic - HoforsSt. Softshell Pants Light - Softshellhose - Night Blue | L - Regular',
+    color:'Night Blue',url:'https://www.bergfreunde.de/stoic-hoforsst-softshell-pants-light-softshellhose/?aid=blue&amp;',
+    sizeFit:'confirmed',shippingKnown:true,discountVerified:true,effectiveDiscountPct:57,effectiveCostEur:71.93,
+    productFitScore:80,score:85};
+  const olive={...base,name:'Stoic - HoforsSt. Softshell Pants Light - Softshellhose - Olive | L - Regular',
+    color:'Olive',url:base.url.replace('blue','olive'),score:83};
+  const smaller={...base,name:base.name.replace('L - Regular','M - Regular'),url:base.url.replace('blue','medium'),
+    sizeFit:'unconfirmed',score:65};
+  const other={...base,name:'Stoic - VittangiSt. Softshell Pants - Softshellhose - Black | L',color:'Black',
+    url:'https://www.bergfreunde.de/stoic-vittangist-softshell-pants/?aid=other',score:82};
+  const result=selectOffers([olive,smaller,other,base]);
+  assert.deepEqual(result.deals.map(o=>o.name),[base.name,other.name]);
+  assert.equal(result.qualifiedCount,2);
+  assert.equal(result.near.length,0);
+});
+
 test('an unknown size remains a review candidate, explicit incompatible sizes are excluded', () => {
   const base = { sourceId: 'bergzeit', brand: 'Haglöfs', name: 'Herren Korp Lite Hose',
     url: 'https://www.bergzeit.de/p/korp/1/', sizeFit: 'unconfirmed', class: 'Near Miss',
