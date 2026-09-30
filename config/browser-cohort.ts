@@ -9,7 +9,7 @@ export const BROWSER_COHORT = {
     'blue-tomato', 'hardloop', 'alpinstore', 'snowinn', 'barrabes', 'varuste', 'hanibal',
     'rockpoint', 'privatesportshop', 'snowcountry', 'asadventure', 'vrijbuiter', 'zalando-de',
     'aboutyou-de', 'bestsecret', 'odlo-eu', 'patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
-    'peakperformance-eu', 'goldwin-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
+    'peakperformance-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
     // Premium brand stores added with the September 2026 brand review.
     // (fjallraven-eu is Cloudflare-protected; surveyed on 30 September 2026.)
@@ -61,6 +61,11 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
   'lundhags-eu': ['https://lundhags.com/eu/category/outlet', 'https://lundhags.com/eu/category/clothing/men/pants'],
   'klattermusen-eu': ['https://www.klattermusen.com/de-de/men/pants/'],
+  'barrabes': ['https://www.barrabes.com/outlet', 'https://www.barrabes.com/pantalones-trekking-hombre/c-18'],
+  'biwak': ['https://www.biwak.com/Sale/', 'https://www.biwak.com/Herren/Bekleidung/Hosen/Lange-Hosen/'],
+  'varuste': ['https://varuste.net/c3455/outlet-tuotteet'],
+  'trekking-koenig': ['https://www.trekking-koenig.de/bekleidung/hosen/'],
+  'carl-denig': ['https://www.carldenig.nl/507-casual-pants'],
   'tapir': ['https://www.tapir-store.de/sale/maenner/', 'https://www.tapir-store.de/wanderhosen-trekkinghosen/maenner/'],
   'sportscheck': ['https://www.sportscheck.com/wandern/sale/', 'https://www.sportscheck.com/hosen/herren/'],
   'sportano': ['https://sportano.com/sale-zone', 'https://sportano.com/hiking-and-trekking-clothing/hiking-trousers'],
@@ -68,6 +73,18 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'bever': ['https://www.bever.nl/c/sale/sale-heren.html', 'https://www.bever.nl/c/sale/sale-wandelen.html'],
   'verticalextreme': ['https://www.verticalextreme.de/outlet-klettern-outdoor/kletterhosen-kletterbekleidung', 'https://www.verticalextreme.de/kletterbekleidung/funktionshosen-trekking-wandern-bergsteigen'],
   'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
+};
+
+// Card rules for shops whose product cards the generic selectors miss
+// ("Variante A": written once from the diagnose run's card markup, then applied
+// without any runtime model or tokens). `reference` names the element that
+// holds the crossed-out original price.
+export type BrowserCardRule = { card: string; name?: string; brand?: string; price?: string; reference?: string };
+export const BROWSER_CARD_RULES: Record<string, BrowserCardRule> = {
+  'barrabes': { card: '.card--product', name: '.card-product-name', price: '.price.is__discount, .card-product-price .price', reference: '.price.is__old' },
+  'biwak': { card: 'li.productData', name: '.productsTitle', brand: '.manufacturer', reference: '.old' },
+  'varuste': { card: '.grid a.item', name: '.item_name', brand: '.product_listing_brand_name' },
+  'trekking-koenig': { card: '.product-box', name: '.product-name', price: '.product-price' },
 };
 
 export function browserStartUrls(shopId: string): string[] {
