@@ -73,12 +73,27 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - Sitemap links are restricted to the shop domain and HTML crawling respects robots.txt.
 - Mammut men's hiking-trouser category uses a targeted HTML parser. Its server-rendered product cards are extracted without requiring Browserless; a repeated screen-reader price is read once and does not become an MSRP.
 - `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials. It also reports Browserless authentication failures observed in today's batches; a configured token alone does not prove it is accepted.
+- `/api/browser-check` verifies the deployed Browserless token with one example.com render per token and UTC day (max three provider calls per day, shared session budget, no shop crawl, no writes to batches/reports, no mail). Health reports its result as `browserProviderCheck` and a non-secret `browserTokenIssue` when the stored token needed whitespace/quote cleanup.
 - Read-only status endpoints use short CDN caching where appropriate.
 
-## Browserless fallback
+## Chromium browser crawl (GitHub Actions, open source)
+
+Browserless is no longer required. The workflow `.github/workflows/browser-crawl.yml` runs nightly at 22:20 UTC on a free GitHub-hosted runner (public repository). `playwright-core` launches a Chromium installed by `playwright-core install chromium`; no browser binary is bundled into Vercel. The job runs the normal crawl pipeline for the browser cohort in `config/browser-cohort.ts` (shops whose direct HTTP pages were parse-empty, plus blocked shops tried with a plain browser only) and stores each result in the Neon table `agent_browser_snapshots`.
+
+- The Vercel batches (00:00–03:00 UTC) merge the latest snapshot younger than 30 hours into that shop's direct crawl. Direct observations win on the same URL; normalization and all deal gates are unchanged. Coverage marks merged shops with `actions-browser-snapshot` / `actions-browser-success`.
+- A late or failed Actions run only means the batch runs without browser data; the report and email are unaffected. `/api/health` shows `actionsBrowser` (fresh snapshots, snapshots with offers, latest collection time, shops that gained offers today).
+- The job never writes batch/report rows or sends mail. It removes `DATABASE_URL`, Browserless and OpenAI credentials from its environment and uses only the GitHub secret `BROWSER_SNAPSHOT_DATABASE_URL`. Without that secret it still runs and reports, but stores nothing.
+- Logs of this public repository are public: the job prints only shop IDs, counts, HTTP statuses and step codes.
+- Manual A/B measurement: *Actions → Chromium browser crawl → Run workflow* with `shops=pilot` (or any list), `compare=true`, `write_snapshot=false`. The job summary and artifact compare direct-only against direct + Chromium on raw offers, unique URLs, relevant products, price evidence, normalized offers, ≥40 % offers and qualified deals.
+- No proxy rotation, CAPTCHA solving or fingerprint evasion. Shops that block datacenter traffic stay blocked.
+
+## Browserless fallback (optional, off by default)
+
+`BROWSERLESS_DAILY_SESSION_LIMIT` now defaults to `0`, so no paid session is admitted unless a positive limit is set explicitly.
+
 
 Set `BROWSERLESS_API_TOKEN` (or `BROWSERLESS_TOKEN`) in Vercel Production. The default endpoint is the Amsterdam Browserless Cloud region (`https://production-ams.browserless.io`) and can be overridden with `BROWSERLESS_BASE_URL`.
-For the existing `playwright-core` CDP connection the WebSocket URL is `wss://production-ams.browserless.io?token=…`; the `/chromium/playwright` path is for the native Playwright protocol (`connect()`), not `connectOverCDP()`. Never log either URL with its credential. `BROWSERLESS_DAILY_SESSION_LIMIT` defaults to 24 provider session admissions per UTC day across all batches; `0` disables paid escalation. The database-backed counter counts REST attempts and CDP connections, not actual billed Browserless units, so monitor usage in Browserless.
+For the existing `playwright-core` CDP connection the WebSocket URL is `wss://production-ams.browserless.io?token=…`; the `/chromium/playwright` path is for the native Playwright protocol (`connect()`), not `connectOverCDP()`. Never log either URL with its credential. `BROWSERLESS_DAILY_SESSION_LIMIT` defaults to 0 (no paid escalation); a positive value admits that many provider sessions per UTC day across all batches. The database-backed counter counts REST attempts and CDP connections, not actual billed Browserless units, so monitor usage in Browserless.
 
 - `/content` renders JavaScript-heavy pages and returns HTML for the JSON-LD/HTML extractors.
 - `/unblock` handles direct 403/429 responses.

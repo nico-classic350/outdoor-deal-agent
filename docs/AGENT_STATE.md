@@ -39,13 +39,14 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 1. official feed/API where available
 2. targeted retailer parsers
 3. generic feed/sitemap/direct HTTP + JSON-LD/HTML
-4. Browserless `/content` for JS-rendered pages
-5. Browserless `/unblock` for 403/429
-6. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
+4. GitHub Actions Chromium snapshot (nightly `browser-crawl.yml`, `agent_browser_snapshots`, merged by the batches when younger than 30 h)
+5. Browserless `/content` for JS-rendered pages (opt-in; `BROWSERLESS_DAILY_SESSION_LIMIT` defaults to 0)
+6. Browserless `/unblock` for 403/429
+7. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
 
 Awin advertiser access was declined. Its runtime adapter, health route, key and setup guide were removed. Historical coverage may still contain `awin-check`; these entries are immutable evidence of old runs.
 
-No local Chromium or full Playwright browser binaries are bundled.
+No local Chromium or full Playwright browser binaries are bundled into Vercel. Only the GitHub Actions job launches Chromium (`BROWSER_RUNTIME=local`, never active when `VERCEL` is set).
 
 ## Results and notification
 
@@ -62,7 +63,7 @@ Never commit values. Supported names:
 - `BROWSERLESS_UNBLOCK=false` to disable unblock
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
-- `BROWSERLESS_DAILY_SESSION_LIMIT` (default 24 session admissions per UTC day across all batches; `0` disables paid escalation). A database-backed atomic counter gates REST attempts and CDP connections, including retries. This is not a precise Browserless billed-unit meter; inspect the account's actual unit usage.
+- `BROWSERLESS_DAILY_SESSION_LIMIT` (default 0 = no paid escalation; a positive value admits that many sessions per UTC day across all batches). A database-backed atomic counter gates REST attempts and CDP connections, including retries. This is not a precise Browserless billed-unit meter; inspect the account's actual unit usage.
 
 Optional bounded LLM extraction pilot (off unless enabled):
 
@@ -78,7 +79,7 @@ For a read-only five-shop Browserless smoke test, set the token in the local she
 
 Health exposes only non-secret configuration state.
 
-As of 30 September 2026, the production batches recorded Browserless HTTP 401 and zero recovered products despite the token being configured. `/api/health` now exposes `browserProviderStatus` and counts of auth-rejected sources. The token must be corrected in Vercel Production and a new deployment created before a subsequent batch can establish recovery.
+As of 30 September 2026, the production batches recorded Browserless HTTP 401 and zero recovered products despite the token being configured. `/api/health` now exposes `browserProviderStatus` and counts of auth-rejected sources. The token must be corrected in Vercel Production and a new deployment created before a subsequent batch can establish recovery. Tokens are now trimmed of whitespace/wrapping quotes (`browserTokenIssue` in health names the kind of issue, never the value). `GET /api/browser-check` performs one bounded `/content` render of example.com per deployed token and UTC day (max three per day, counted in the shared session budget) and stores the outcome in `agent_browser_provider_checks`; `browserProviderStatus=check-accepted` means the provider accepted the current token, `recovered-products` means a batch actually gained products.
 
 Two legacy ChatGPT automations that independently sent the same daily report were paused on 30 September 2026. The app's Gmail SMTP notification and Vercel watchdog remain the sole active report pipeline. See `docs/HANDOVER.md` for status, operations, and the current open issue.
 

@@ -3,11 +3,14 @@ import { extractHtmlFallback, extractJsonLd } from './extract';
 import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
 import { reserveBrowserSession } from './browser-budget';
+import { newLocalContext } from './local-browser';
 import pLimit from 'p-limit';
 
 // A batch runs several shops concurrently. Keep its Browserless sessions serial
 // so a single function invocation cannot consume several provider slots.
 const browserSessionLimit = pLimit(1);
+// Local Chromium on a GitHub runner has no per-session cost; bound memory use.
+const localSessionLimit = pLimit(Math.max(1, Math.min(4, Number(process.env.LOCAL_BROWSER_CONCURRENCY || 3))));
 // A rejected credential is shared by every shop in this function invocation.
 // Do not turn one bad token into dozens of paid, doomed REST/CDP attempts.
 let rejectedCredentialEndpoint: string | null = null;
@@ -345,6 +348,60 @@ async function enrichSingleOfferSizes(page: import('playwright-core').Page, offe
   return offers;
 }
 
+// Shared page pipeline for remote (CDP) and local Chromium sessions.
+async function renderAndExtract(
+  page: import('playwright-core').Page,
+  source: ShopSource,
+  url: string,
+  navigate: boolean,
+  deadline: number,
+  setPhase: (phase: string) => void = () => {},
+): Promise<BrowserFallbackResult> {
+  page.setDefaultTimeout(timeLeft(deadline, 2500));
+  let httpStatus = 200;
+  if (navigate || page.url() === 'about:blank') {
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 15000) });
+    if (response) httpStatus = response.status();
+  }
+  if (httpStatus >= 400) {
+    return { offers: [], mode: 'playwright', httpStatus, steps: [`playwright-http-${httpStatus}`] };
+  }
+  requireTime(deadline, 2500);
+  setPhase('extraction');
+  await stabilizeRenderedPage(page, deadline);
+  requireTime(deadline, 2500);
+  const html = await page.content();
+  let offers = parseRenderedHtml(source, url, html);
+  if (!offers.length) offers = await extractRenderedDomOffers(page, source, url);
+  offers = await enrichSingleOfferSizes(page, offers);
+  return {
+    offers,
+    mode: 'playwright',
+    httpStatus,
+    renderedHtml: html,
+    steps: [offers.length ? 'playwright-extracted' : 'playwright-empty'],
+  };
+}
+
+async function localPlaywrightRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
+  const started = Date.now();
+  let context: import('playwright-core').BrowserContext | null = null;
+  let phase = 'launch';
+  try {
+    context = await newLocalContext();
+    const page = await context.newPage();
+    phase = 'navigation';
+    const result = await renderAndExtract(page, source, url, true, deadline, p => { phase = p; });
+    return { ...result, elapsedMs: Date.now() - started, steps: ['local-chromium', ...result.steps!] };
+  } catch (error) {
+    const code = error instanceof Error && error.message === 'browser-budget-exhausted' ? error.message : playwrightErrorCode(error);
+    return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started,
+      steps: ['local-chromium', `playwright-phase-${phase}`, code] };
+  } finally {
+    try { if (context) await context.close(); } catch {}
+  }
+}
+
 async function playwrightFromEndpoint(
   source: ShopSource,
   url: string,
@@ -365,27 +422,9 @@ async function playwrightFromEndpoint(
     const context = browser.contexts()[0];
     if (!context) return { offers: [], mode: 'playwright', elapsedMs: Date.now() - started, steps: [...options.steps, 'no-context'] };
     page = context.pages()[0] || await context.newPage();
-    page.setDefaultTimeout(timeLeft(options.deadline, 2500));
     phase = 'navigation';
-    if (options.navigate || page.url() === 'about:blank') {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(options.deadline, 12000) });
-    }
-    requireTime(options.deadline, 2500);
-    phase = 'extraction';
-    await stabilizeRenderedPage(page, options.deadline);
-    requireTime(options.deadline, 2500);
-    const html = await page.content();
-    let offers = parseRenderedHtml(source, url, html);
-    if (!offers.length) offers = await extractRenderedDomOffers(page, source, url);
-    offers = await enrichSingleOfferSizes(page, offers);
-    return {
-      offers,
-      mode: 'playwright',
-      httpStatus: 200,
-      renderedHtml: html,
-      elapsedMs: Date.now() - started,
-      steps: [...options.steps, offers.length ? 'playwright-extracted' : 'playwright-empty'],
-    };
+    const rendered = await renderAndExtract(page, source, url, options.navigate, options.deadline, p => { phase = p; });
+    return { ...rendered, elapsedMs: Date.now() - started, steps: [...options.steps, ...rendered.steps!] };
   } catch (error) {
     const code = error instanceof Error && /^(browser-budget-exhausted|browser-daily-limit-exhausted)$/.test(error.message) ? error.message : playwrightErrorCode(error);
     console.info(JSON.stringify({ event: 'playwright-attempt', sourceId: source.id, phase, code, elapsedMs: Date.now() - started }));
@@ -434,6 +473,11 @@ async function browserExtractOnce(
   options: { blocked?: boolean; deadline?: number } = {},
 ): Promise<BrowserFallbackResult> {
   if (!browserFallbackConfigured()) return { offers: [], mode: 'none', steps: ['browser-disabled'] };
+  if (browserFallbackConfig().mode === 'local-playwright') {
+    const deadline = Math.min(options.deadline ?? Date.now() + 45000, Date.now() + 45000);
+    const { renderedHtml: _html, ...result } = await localPlaywrightRequest(source, url, deadline);
+    return result;
+  }
   const credentialEndpoint=browserFallbackConfig().contentUrl;
   if(credentialEndpoint && rejectedCredentialEndpoint===credentialEndpoint)
     return { offers: [], mode: 'none', steps: ['provider-auth-circuit-open'] };
@@ -552,5 +596,6 @@ export async function browserExtract(
   url: string,
   options: { blocked?: boolean; deadline?: number } = {},
 ): Promise<BrowserFallbackResult> {
-  return browserSessionLimit(() => browserExtractOnce(source, url, options));
+  const limiter = browserFallbackConfig().mode === 'local-playwright' ? localSessionLimit : browserSessionLimit;
+  return limiter(() => browserExtractOnce(source, url, options));
 }

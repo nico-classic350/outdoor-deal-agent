@@ -12,10 +12,10 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { dailyBrowserSessionLimit } = require('../lib/browser-budget.ts');
 
-test('Browserless session admissions have a conservative, bounded daily default', () => {
-  assert.equal(dailyBrowserSessionLimit({}), 24);
+test('Browserless session admissions are opt-in and bounded', () => {
+  assert.equal(dailyBrowserSessionLimit({}), 0);
   assert.equal(dailyBrowserSessionLimit({ BROWSERLESS_DAILY_SESSION_LIMIT: '0' }), 0);
   assert.equal(dailyBrowserSessionLimit({ BROWSERLESS_DAILY_SESSION_LIMIT: '8' }), 8);
   assert.equal(dailyBrowserSessionLimit({ BROWSERLESS_DAILY_SESSION_LIMIT: '999' }), 120);
-  assert.equal(dailyBrowserSessionLimit({ BROWSERLESS_DAILY_SESSION_LIMIT: 'invalid' }), 24);
+  assert.equal(dailyBrowserSessionLimit({ BROWSERLESS_DAILY_SESSION_LIMIT: 'invalid' }), 0);
 });

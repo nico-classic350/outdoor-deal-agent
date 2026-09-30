@@ -5,9 +5,11 @@ import { neon } from '@neondatabase/serverless';
 // the cap effective across independent cron functions and delayed retries.
 let schemaPromise: Promise<void> | null = null;
 
+// Browserless is opt-in since the GitHub Actions Chromium crawler replaced it:
+// without an explicit positive limit no paid provider session is admitted.
 export function dailyBrowserSessionLimit(env = process.env): number {
-  const value = Number(env.BROWSERLESS_DAILY_SESSION_LIMIT || 24);
-  return Number.isFinite(value) ? Math.max(0, Math.min(120, Math.floor(value))) : 24;
+  const value = Number(env.BROWSERLESS_DAILY_SESSION_LIMIT ?? 0);
+  return Number.isFinite(value) ? Math.max(0, Math.min(120, Math.floor(value))) : 0;
 }
 
 export async function reserveBrowserSession(): Promise<boolean> {

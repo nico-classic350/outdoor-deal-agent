@@ -127,7 +127,7 @@ pilot on a few otherwise empty shops. Each needs a separate bounded A/B test.
 An invalid Browserless credential now opens a function-scoped circuit after
 one provider 401, preventing the same bad token from being retried across
 shops in that invocation. A database-backed UTC-day session-admission counter
-now limits provider calls across independent invocations (default 24). It
+now limits provider calls across independent invocations (default 0 since the Actions Chromium crawl). It
 counts REST attempts and CDP connections conservatively, not the exact billed
 Browserless units. A live token-validating pilot remains to be run after the
 Production environment is confirmed deployed; no token value is logged.
@@ -156,3 +156,21 @@ via direct/merchant paths. Browserless was configured but recovered zero shops:
 rejection, including HTTP 401 from `/unblock` and `/content`. The revised
 health response exposes this distinction. Restoring the credential and
 re-running a bounded pilot remains an open operation, not a completed test.
+All recorded provider failures were HTTP 401 on the first real REST call of
+each invocation (`/content` and `/unblock` alike); the circuit prevented
+further calls. A bounded `/api/browser-check` now provides a one-request
+credential verification before the next batch window.
+
+## Open-source browser path, 30 September 2026
+
+The Browserless free plan (1,000 units/month) was exhausted and is not
+sustainable for ~55 browser-dependent shops. Rendering moved to a nightly
+GitHub Actions job: `playwright-core` + Chromium on a free runner, running the
+unchanged crawl pipeline for `config/browser-cohort.ts` with local-browser
+escalation (shared browser, isolated context per page, images/fonts blocked,
+3 concurrent shops, 90 s per shop). Results are stored as snapshots and merged
+into the Vercel batches. The job has a built-in A/B mode (direct-only versus
+direct + Chromium, same runner and time window). No measurement exists yet;
+the first manual pilot run must establish whether it adds relevant products,
+price evidence and deals, not merely raw cards. Blocked (403) shops are tried
+with a plain browser only and are expected to remain largely blocked.
