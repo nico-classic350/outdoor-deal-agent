@@ -113,7 +113,7 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
     if(!values.length) return;
 
     const price=values[0];
-    const reference=num(card.find('del,s,[data-testid*="original-price"],[class*="oldPrice"],[class*="originalPrice"]').first().text());
+    const reference=num(card.find('del,s,[data-testid*="original-price"],[class*="oldPrice"],[class*="originalPrice"],[class*="old-price"],[class*="line-through"],[class*="strike"],[class*="was-price"],[class*="price--pseudo"],[class*="price--line-through"]').first().text());
     const displayedDiscount=discountFrom($,card);
     const rrp=reference && reference>price?reference:undefined;
     let name=text(card.find('[data-e2e-test="product-card-info-name-section"],[itemprop="name"],[data-testid*="name"],[data-testid*="title"],h2,h3,h4,[class*="title"],[class*="name"]').first().text())||text(a.text());

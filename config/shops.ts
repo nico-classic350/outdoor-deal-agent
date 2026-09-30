@@ -96,3 +96,13 @@ export const SHOPS: ShopSource[] = DATA.split('\n').map((line) => {
   const [id, name, country, baseUrl, priority] = line.split('|');
   return { id, name, country, baseUrl, priority: Number(priority) as 1|2|3 };
 });
+
+// Official single-brand stores. Their listing cards often omit the brand
+// ("Essential 3/4 Tights"), so offers without a brand inherit the store's.
+export const SHOP_BRAND: Record<string, string> = {
+  'arcteryx-eu': "Arc'teryx", 'odlo-eu': 'Odlo', 'dynafit-eu': 'Dynafit', 'ortovox-eu': 'Ortovox',
+  'lasportiva-eu': 'La Sportiva', 'mammut-eu': 'Mammut', 'patagonia-eu': 'Patagonia', 'rab-eu': 'Rab',
+  'norrona-eu': 'Norrøna', 'haglofs-eu': 'Haglöfs', 'blackdiamond-eu': 'Black Diamond',
+  'peakperformance-eu': 'Peak Performance', 'houdini-eu': 'Houdini', 'adidas-terrex-de': 'Adidas Terrex',
+  'goldwin-eu': 'Goldwin', 'tilak-eu': 'Tilak', '66north-eu': '66°North',
+};

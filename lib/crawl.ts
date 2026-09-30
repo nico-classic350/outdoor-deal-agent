@@ -10,6 +10,7 @@ import { productEligible } from './product-rules.mjs';
 import { rankDiscoveryUrls } from './discovery.mjs';
 import robotsParser from 'robots-parser';
 import { browserStartUrls } from '../config/browser-cohort';
+import { SHOP_BRAND } from '../config/shops';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
@@ -77,6 +78,13 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
 }
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
+  const result=await crawlSourceUnbranded(source);
+  const storeBrand=SHOP_BRAND[source.id];
+  if(storeBrand) for(const offer of result.offers) if(!offer.brand) offer.brand=storeBrand;
+  return result;
+}
+
+async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
   const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
   const expandedDiscovery=process.env.DISCOVERY_STRATEGY==='expanded' ||
     (process.env.DISCOVERY_STRATEGY!=='baseline' && source.id==='bergfreunde');

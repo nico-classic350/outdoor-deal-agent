@@ -35,10 +35,14 @@ export function browserCohort(selection = 'all'): string[] {
 // sits in the US and bare domains geo-redirect to US/UK stores. Verified with
 // the diagnose mode of browser-crawl.yml on 30 September 2026.
 export const BROWSER_START_URLS: Record<string, string[]> = {
-  'odlo-eu': ['https://www.odlo.com/de-de/c/herren/kleidung/hosen-tights', 'https://www.odlo.com/de-de/c/outlet/men/pants-tights'],
+  // Outlet first: struck-through prices there are the reference-price evidence.
+  'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/herren/hosen-tights', 'https://www.odlo.com/de-de/c/herren/kleidung/hosen-tights'],
   'rab-eu': ['https://rab.equipment/eu/mens/pants'],
   'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/', 'https://www.norrona.com/de-DE/produkte/herren/hosen/'],
-  'outdoor-renner': ['https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/', 'https://www.outdoor-renner.de/outdoorhosen-herren-uebergroessen/'],
+  // /de is the euro store; /en serves GBP to the US runner.
+  'haglofs-eu': ['https://www.haglofs.com/de/herren/hosen-herren/hosen-lange-hosen-herren'],
+  // Sale first, then Kurzgrößen (inseam fits the profile better than Übergrößen).
+  'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
 };
 
 export function browserStartUrls(shopId: string): string[] {

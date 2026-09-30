@@ -116,3 +116,26 @@ test('browser start URLs are same-shop listing pages', async () => {
     for (const u of urls) assert.equal(new URL(u).hostname, new URL(shop.baseUrl).hostname, `${u} stays on ${id}`);
   }
 });
+
+test('outlet cards keep the struck-through price as reference-price evidence', () => {
+  const { extractHtmlFallback } = require('../lib/extract.ts');
+  const html = `<main><article id="product-1"><a href="/de-de/p/ascent-hose-1.html"><img src="/i.jpg"></a>
+    <div>-45 %</div><h3>Odlo Ascent Light Wanderhose Herren</h3>
+    <p class="flex font-bold"><span>60,45 €</span> <span class="line-through text-grey-40">109,95 €</span></p></article>
+    <article id="product-2"><a href="/p/full.html"></a><h3>Odlo Brensholmen Hose</h3><p><span>89,95 €</span></p></article></main>`;
+  const source = { id: 'odlo-eu', name: 'Odlo EU', country: 'DE', baseUrl: 'https://www.odlo.com', priority: 1 };
+  const [discounted, full] = extractHtmlFallback(html, source, 'https://www.odlo.com/de-de/c/outlet/herren/hosen-tights');
+  assert.equal(discounted.price, 60.45);
+  assert.equal(discounted.rrp, 109.95);
+  assert.equal(discounted.rrpSource, 'html:marked-reference-price');
+  assert.equal(full.rrp, undefined);
+});
+
+test('single-brand store names are valid profile brands', () => {
+  const { SHOP_BRAND, SHOPS } = require('../config/shops.ts');
+  const { PROFILE } = require('../config/profile.ts');
+  for (const [id, brand] of Object.entries(SHOP_BRAND)) {
+    assert.ok(SHOPS.some(s => s.id === id), `${id} exists`);
+    assert.ok(PROFILE.brands.includes(brand), `${brand} is a profile brand`);
+  }
+});
