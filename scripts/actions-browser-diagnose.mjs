@@ -85,6 +85,10 @@ async function inspect(url) {
         consentVisible: consent,
         blockedHint: /access denied|captcha|are you a robot|verify you are human|cloudflare|forbidden/i.test(text.slice(0, 3000)),
         categoryLinks,
+        saleLinks: [...new Map(links.filter(l => /sale|outlet|reduziert|angebot|deals|special|clearance/i.test(l.href + ' ' + l.text) && !W.test(l.href + ' ' + l.text)).map(l => [l.href, l])).values()].slice(0, 12),
+        localeLinks: [...new Map([...document.querySelectorAll('a[href]')].map(a => ({ href: a.href, text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40) }))
+          .filter(l => /country|region|locale|market|currency|moneda|\/de-de|\/de_de|\/eu\b|\/en-eu|deutschland|germany|euro/i.test(l.href + ' ' + l.text)).map(l => [l.href, l])).values()].slice(0, 12),
+        euroSnippets: (text.match(/.{0,40}(?:€|EUR).{0,20}/g) || []).slice(0, 5),
         currencies: [...new Set((text.match(/€|EUR|USD|\$|£|GBP|SEK|NOK|DKK|CHF/g) || []))],
         cardSamples: (() => {
           // Smallest elements carrying a price, climbed up to a card with a link and an image.
@@ -105,7 +109,10 @@ async function inspect(url) {
             const clone = card.cloneNode(true);
             clone.querySelectorAll('svg,script,style,noscript,source').forEach(n => n.remove());
             clone.querySelectorAll('*').forEach(n => { for (const a of [...n.attributes]) if (!/^(class|href|itemprop|itemtype|data-testid|data-price|content|aria-label)$/.test(a.name)) n.removeAttribute(a.name); });
-            return { tag: card.tagName.toLowerCase(), html: clone.outerHTML.replace(/\s+/g, ' ').slice(0, 1400) };
+            const priceNodes = [...card.querySelectorAll('*')].filter(n => n.children.length <= 1 && /\d/.test(n.textContent || '') && (n.textContent || '').trim().length < 40 &&
+              /€|EUR|%|UVP|statt|RRP|was|price|preis/i.test((n.textContent || '') + ' ' + (n.getAttribute('class') || '') + ' ' + n.tagName))
+              .slice(0, 10).map(n => ({ tag: n.tagName.toLowerCase(), cls: String(n.getAttribute('class') || '').slice(0, 80), text: (n.textContent || '').replace(/\s+/g, ' ').trim() }));
+            return { tag: card.tagName.toLowerCase(), cls: String(card.getAttribute('class') || '').slice(0, 80), priceNodes, html: clone.outerHTML.replace(/\s+/g, ' ').slice(0, 600) };
           });
         })(),
       };
@@ -122,13 +129,13 @@ async function inspect(url) {
 // shops geo-redirect bare domains). Found in the first diagnosis run or guessed
 // from the shops' URL schemes; this run verifies them.
 const CANDIDATES = {
-  'patagonia-eu': ['https://eu.patagonia.com/de/de/shop/mens-pants', 'https://eu.patagonia.com/de/de/shop/web-specials-mens'],
-  'rab-eu': ['https://rab.equipment/eu/mens/pants', 'https://rab.equipment/eu/sale/mens'],
-  'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/', 'https://www.norrona.com/de-DE/produkte/herren/hosen/'],
-  'haglofs-eu': ['https://www.haglofs.com/de-de/men/bottoms-men/bottoms-trousers-men', 'https://www.haglofs.com/en/men/bottoms-men/bottoms-trousers-men'],
-  'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/men/pants-tights', 'https://www.odlo.com/de-de/c/men/apparel/pants-tights'],
-  'outdoor-renner': ['https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/', 'https://www.outdoor-renner.de/outdoorhosen-herren-uebergroessen/'],
-  'trekkinn': ['https://www.tradeinn.com/trekkinn/de'],
+  'patagonia-eu': ['https://eu.patagonia.com/de/de/'],
+  'rab-eu': ['https://rab.equipment/eu/', 'https://rab.equipment/eu/mens/pants'],
+  'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/'],
+  'haglofs-eu': ['https://www.haglofs.com/de-de', 'https://www.haglofs.com/de', 'https://www.haglofs.com/en-eu', 'https://www.haglofs.com/eu'],
+  'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/herren/hosen-tights', 'https://www.odlo.com/de-de/c/outlet'],
+  'outdoor-renner': ['https://www.outdoor-renner.de/', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
+  'trekkinn': ['https://www.tradeinn.com/trekkinn/de', 'https://www.tradeinn.com/trekkinn/de/herren-hosen/10573/s'],
   'peakperformance-eu': [],
 };
 
@@ -137,9 +144,9 @@ for (const id of browserCohort(selection)) {
   const source = SHOPS.find(shop => shop.id === id);
   if (!source) { console.log(`[diagnose] unknown shop ${id}`); continue; }
   const before = handed.length;
-  const { offers, coverage } = await crawlSource(source);
+  const { offers, coverage } = process.env.DIAGNOSE_SKIP_CRAWL ? { offers: [], coverage: { status: 'skipped', technicalPath: [], httpStatuses: [] } } : await crawlSource(source);
   const escalations = handed.slice(before).map(h => ({ ...h, steps: h.steps.slice(0, 10) }));
-  const start = await inspect(source.baseUrl);
+  const start = process.env.DIAGNOSE_SKIP_CRAWL ? { categoryLinks: [] } : await inspect(source.baseUrl);
   const rendered = [];
   for (const h of escalations.slice(0, 2)) if (h.url !== source.baseUrl) rendered.push(await inspect(h.url));
   // Try the best-looking men's trousers link from the start page through the real extractor.
