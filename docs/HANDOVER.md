@@ -71,6 +71,8 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 
 **Markenliste (30. September):** Nur Premium-Marken mit nachweislich hochwertigen Materialien. Entfernt: Stoic (Bergfreunde-Eigenmarke, gemischte Bewertungen zur Materialhaltbarkeit), Adidas Terrex (Massenmarkt), Black Diamond (Schwerpunkt Hartware). Neu: Fjällräven, Klättermusen, Bergans, Lundhags, Mountain Equipment, Montura. Der Black-Diamond- und der Adidas-Terrex-Shop wurden im Register durch Fjällräven und Lundhags ersetzt; Bergans und Klättermusen kamen hinzu. Trekkinn (Dollarpreise für den US-Runner) und der geschlossene Montura-Shop wurden entfernt; die Marke Montura bleibt für Händlerangebote (92 Shops, weiterhin 16 Batches).
 
+**Deal-Ausbeute (30. September, abends):** Bericht und E-Mail listen jetzt **alle** qualifizierten Deals (nach Score sortiert, kompakte Zeilen gegen Gmail-Kürzung), nicht mehr nur die Top 5. Neue Belegquellen: Shopify-`compare_at_price` (DF Sport, SportIT direkt auf Vercel, ohne Browser), ausdrücklich beschriftete Referenzpreise (UVP, statt, Listino, RRP) und optisch durchgestrichene Preise; ein unbeschrifteter höherer Preis zählt nie. Für mögliche Deals öffnet der Actions-Lauf die Produktseite und liest nur wählbare Größen (max. 6 je Shop). Neu im Chromium-Lauf: Tapir, SportScheck, Sportano, Bottero, Bever, VerticalExtreme. Publisher-/Affiliate-Anmeldungen werden vorerst nicht verfolgt.
+
 ## Übernahme und Prüfung
 
 1. Repository klonen, `corepack enable`, `corepack pnpm install --frozen-lockfile`, `corepack pnpm run preflight` ausführen. Keine Secrets ins Repository schreiben.

@@ -1,5 +1,5 @@
 import { RawOffer, ShopSource } from './types';
-import { extractHtmlFallback, extractJsonLd } from './extract';
+import { extractHtmlFallback, extractJsonLd, labelledReferencePrice } from './extract';
 import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
 import { reserveBrowserSession } from './browser-budget';
@@ -318,13 +318,17 @@ async function extractRenderedDomOffers(
     for (const row of rows) {
       if (!row.href || !row.name || seen.has(row.href)) continue;
       const textPrices = euroPrices(`${row.priceText} ${row.text}`);
-      const attrPrice = numberFromText(row.priceText);
+      // A bare attribute price is only trusted when the card shows no other currency
+      // (geo-redirected US/UK stores render "$200" / "£90").
+      const attrPrice = /\$|£|USD|GBP|SEK|NOK|DKK|CHF|PLN|CZK|zł|Kč/.test(row.text) ? undefined : numberFromText(row.priceText);
       const prices = textPrices.length ? textPrices : (attrPrice ? [attrPrice] : []);
       if (!prices.length) continue;
       const struckPrice = euroPrices(row.struckText)[0];
-      const current = prices.filter(value => value !== struckPrice);
+      const labelledPrice = struckPrice ? undefined : labelledReferencePrice(row.text);
+      const referencePrice = struckPrice || labelledPrice;
+      const current = prices.filter(value => value !== referencePrice);
       const price = Math.min(...(current.length ? current : prices));
-      const rrp = struckPrice && struckPrice > price ? struckPrice : undefined;
+      const rrp = referencePrice && referencePrice > price ? referencePrice : undefined;
       const badge = Number(row.text.match(/(?:^|\s)[-–−]\s?(\d{1,2})\s?%/)?.[1] || 0);
       const displayedDiscount = !rrp && badge >= 40 && badge < 100 ? badge : undefined;
       seen.add(row.href);
@@ -339,7 +343,7 @@ async function extractRenderedDomOffers(
         currency: 'EUR',
         price,
         rrp,
-        rrpSource: rrp ? 'html:struck-through-price' : undefined,
+        rrpSource: rrp ? (struckPrice ? 'html:struck-through-price' : 'html:labelled-reference-price') : undefined,
         observedDiscountPct: displayedDiscount,
         discountSource: displayedDiscount ? 'merchant:displayed-discount' : undefined,
         availability: /ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(row.text) ? 'out_of_stock' : 'unknown',

@@ -14,6 +14,9 @@ export const BROWSER_COHORT = {
     // Premium brand stores added with the September 2026 brand review.
     // (fjallraven-eu is Cloudflare-protected; surveyed on 30 September 2026.)
     'lundhags-eu', 'bergans-eu', 'klattermusen-eu',
+    // Shops whose direct crawl found no relevant products (whole-pipeline run,
+    // 30 September 2026) but whose listings render with euro prices.
+    'tapir', 'sportscheck', 'sportano', 'bottero', 'bever', 'verticalextreme',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
@@ -58,6 +61,12 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
   'lundhags-eu': ['https://lundhags.com/eu/category/outlet', 'https://lundhags.com/eu/category/clothing/men/pants'],
   'klattermusen-eu': ['https://www.klattermusen.com/de-de/men/pants/'],
+  'tapir': ['https://www.tapir-store.de/sale/maenner/', 'https://www.tapir-store.de/wanderhosen-trekkinghosen/maenner/'],
+  'sportscheck': ['https://www.sportscheck.com/wandern/sale/', 'https://www.sportscheck.com/hosen/herren/'],
+  'sportano': ['https://sportano.com/sale-zone', 'https://sportano.com/hiking-and-trekking-clothing/hiking-trousers'],
+  'bottero': ['https://www.botteroski.com/it/651-offerte-outlet', 'https://www.botteroski.com/it/522-montagna/32-abbigliamento-montagna/35-Pantaloni-outdoor-uomo'],
+  'bever': ['https://www.bever.nl/c/sale/sale-heren.html', 'https://www.bever.nl/c/sale/sale-wandelen.html'],
+  'verticalextreme': ['https://www.verticalextreme.de/outlet-klettern-outdoor/kletterhosen-kletterbekleidung', 'https://www.verticalextreme.de/kletterbekleidung/funktionshosen-trekking-wandern-bergsteigen'],
   'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
 };
 

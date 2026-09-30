@@ -16,6 +16,15 @@ function num(value:any):number|undefined{
   const n=Number(normalized); return Number.isFinite(n)&&n>0?n:undefined;
 }
 function text(value:any){return String(value??'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
+/**
+ * A reference price the shop labels explicitly on the card ("UVP 99,99 €",
+ * "statt 129,95 €", "Listino: 79,95 €", "Adviesprijs €89,95", "RRP €120").
+ * Only these labels count; an unlabelled second price is not evidence.
+ */
+export function labelledReferencePrice(value:string):number|undefined{
+  const m=String(value||'').match(/(?:\bUVP\b|\bstatt\b|\bListino\b|Prezzo di listino|\bAdviesprijs\b|\bRRP\b|Originalpreis|ursprünglich|\bPrix conseillé\b)\s*:?\s*(?:€|EUR)?\s*(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)?/i);
+  return m?num(m[1]):undefined;
+}
 function discountFrom($:any,scope:any){
   const labels=scope.find('[data-testid*="discount" i],[data-testid*="badge" i],[class*="discount" i],[class*="rabatt" i],[class*="percent" i],[class*="badge" i],[class*="sale-badge" i],[data-e2e-test*="discount" i]')
     .map((_:number,node:any)=>text($(node).text())).get();
@@ -112,8 +121,13 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
     const values=explicitPriceValues.length?explicitPriceValues:currencyValues;
     if(!values.length) return;
 
-    const price=values[0];
-    const reference=num(card.find('del,s,[data-testid*="original-price"],[class*="oldPrice"],[class*="originalPrice"],[class*="old-price"],[class*="line-through"],[class*="strike"],[class*="was-price"],[class*="price--pseudo"],[class*="price--line-through"]').first().text());
+    const struck=num(card.find('del,s,[data-testid*="original-price"],[class*="oldPrice"],[class*="originalPrice"],[class*="old-price"],[class*="line-through"],[class*="strike"],[class*="was-price"],[class*="price--pseudo"],[class*="price--line-through"]').first().text());
+    // card.text() glues adjacent elements ("WanderhoseUVP 150 €"); read labels from spaced markup text.
+    const labelled=struck?undefined:labelledReferencePrice(text(card.html()));
+    const reference=struck||labelled;
+    // With a labelled reference the sale price is the lowest other amount on the card.
+    const others=labelled?values.filter(v=>Math.abs(v-labelled)>0.001):[];
+    const price=others.length?Math.min(...others):values[0];
     const displayedDiscount=discountFrom($,card);
     const rrp=reference && reference>price?reference:undefined;
     let name=text(card.find('[data-e2e-test="product-card-info-name-section"],[itemprop="name"],[data-testid*="name"],[data-testid*="title"],h2,h3,h4,[class*="title"],[class*="name"]').first().text())||text(a.text());
@@ -124,7 +138,7 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
     const image=img.attr('src')||img.attr('data-src')||img.attr('data-lazy-src')||srcset?.split(',')[0]?.trim().split(/\s+/)[0];
     seen.add(url);
     out.push({sourceId:source.id,merchant:source.name,merchantCountry:source.country,url,
-      imageUrl:absolute(pageUrl,image)||undefined,brand,name,currency:'EUR',price,rrp,rrpSource:rrp?'html:marked-reference-price':undefined,
+      imageUrl:absolute(pageUrl,image)||undefined,brand,name,currency:'EUR',price,rrp,rrpSource:rrp?(struck?'html:marked-reference-price':'html:labelled-reference-price'):undefined,
       observedDiscountPct:!rrp&&displayedDiscount?displayedDiscount:undefined,
       discountSource:!rrp&&displayedDiscount?'merchant:displayed-discount':undefined,
       availability:/ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(blob)?'out_of_stock':'unknown',
