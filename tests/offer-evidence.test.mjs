@@ -28,12 +28,12 @@ test('Mammut product card is discovered without doubling screen reader price',()
   assert.equal(offers[0].brand,'Mammut');
 });
 
-test('Stoic listing discovers the brand and records only an explicit discount badge',()=>{
-  const html=`<article class="product-card"><a href="/stoic-hoforsst-softshell-pants-light/">Stoic Hoforsst Softshell Pants Light</a>
+test('Lundhags listing discovers the brand and records only an explicit discount badge',()=>{
+  const html=`<article class="product-card"><a href="/lundhags-hoforsst-softshell-pants-light/">Lundhags Hoforsst Softshell Pants Light</a>
     <span class="discount-badge">−60%</span><span class="price">67,98 €</span></article>`;
   const offers=extractTargetedListing(html,{id:'bergfreunde',name:'Bergfreunde',country:'DE'},'https://www.bergfreunde.de/outlet/');
   assert.equal(offers.length,1);
-  assert.equal(offers[0].brand,'Stoic');
+  assert.equal(offers[0].brand,'Lundhags');
   assert.equal(offers[0].observedDiscountPct,60);
   assert.equal(offers[0].rrp,undefined);
 });
@@ -80,7 +80,7 @@ test('JSON-LD does not transfer a model-level reference across variants',()=>{
 });
 
 test('variant-specific L in stock and an explicit merchant discount are extracted',()=>{
-  const product={'@type':'Product',name:'Hoforsst Softshell Pants Light',brand:'Stoic',
+  const product={'@type':'Product',name:'Hoforsst Softshell Pants Light',brand:'Lundhags',
     offers:{'@type':'Offer',price:67.98,priceCurrency:'EUR',size:'L Regular',availability:'https://schema.org/InStock'}};
   const html=`<span class="discount-badge">−60%</span><script type="application/ld+json">${JSON.stringify(product)}</script>`;
   const offer=extractJsonLd(html,{id:'bergfreunde',name:'Bergfreunde',country:'DE'},'https://www.bergfreunde.de/pants')[0];
@@ -102,7 +102,7 @@ test('unverified size and unknown shipping cannot become a confirmed deal',async
 
 test('available L variant can qualify using displayed discount with no RRP',async()=>{
   const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',url:'https://www.bergfreunde.de/pants',
-    brand:'Stoic',name:'Hoforsst Softshell Pants Light',currency:'EUR',price:67.98,shipping:0,sizes:['L Regular'],
+    brand:'Lundhags',name:'Hoforsst Softshell Pants Light',currency:'EUR',price:67.98,shipping:0,sizes:['L Regular'],
     sizeAvailability:'available',observedDiscountPct:60,discountSource:'merchant:displayed-discount'});
   assert.equal(offer?.sizeFit,'confirmed');
   assert.equal(offer?.discountVerified,true);
@@ -111,7 +111,7 @@ test('available L variant can qualify using displayed discount with no RRP',asyn
 
 test('shipping reduces an explicitly displayed merchant discount without inventing an RRP',async()=>{
   const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',
-    url:'https://www.bergfreunde.de/pants',brand:'Stoic',name:'Hoforsst Softshell Pants Light',
+    url:'https://www.bergfreunde.de/pants',brand:'Lundhags',name:'Hoforsst Softshell Pants Light',
     currency:'EUR',price:67.98,shipping:3.95,sizes:['L Regular'],sizeAvailability:'available',
     observedDiscountPct:60,discountSource:'merchant:displayed-discount'});
   assert.equal(offer?.rrp,null);
@@ -120,9 +120,19 @@ test('shipping reduces an explicitly displayed merchant discount without inventi
 
 test('a long trekking trouser survives incidental mentions of shorts and waterproof pockets',async()=>{
   const offer=await normalizeOffer({sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',
-    url:'https://www.bergfreunde.de/pants',brand:'Stoic',name:'Herren Trekking Pants Light',
+    url:'https://www.bergfreunde.de/pants',brand:'Lundhags',name:'Herren Trekking Pants Light',
     description:'Leichte Trekkinghose mit wasserdichter Tasche; passende Shorts separat erhältlich',
     currency:'EUR',price:60,rrp:120,rrpSource:'merchant:reference-price',sizes:[]});
   assert.ok(offer);
   assert.equal(offer.sizeFit,'unconfirmed');
+});
+
+test('brands match without diacritics and removed labels are rejected',async()=>{
+  const offer={sourceId:'bergfreunde',merchant:'Bergfreunde',merchantCountry:'DE',url:'https://www.bergfreunde.de/keb',
+    name:'Keb Trousers M Wanderhose',currency:'EUR',price:99,shipping:0,sizes:['50'],
+    observedDiscountPct:50,discountSource:'merchant:displayed-discount'};
+  assert.equal((await normalizeOffer({...offer,brand:'Fjallraven'}))?.brand,'Fjällräven');
+  assert.equal((await normalizeOffer({...offer,brand:undefined,name:'Haglofs Mid Standard Pant Herren Wanderhose'}))?.brand,'Haglöfs');
+  assert.equal((await normalizeOfferChecked({...offer,brand:'Stoic'})).reason,'brand-not-allowed');
+  assert.equal((await normalizeOfferChecked({...offer,brand:'Adidas Terrex'})).reason,'brand-not-allowed');
 });

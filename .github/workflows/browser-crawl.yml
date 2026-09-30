@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       shops:
-        description: 'all | render | blocked | pilot | comma-separated shop IDs'
+        description: 'all (= render) | render | blocked | everything | pilot | comma-separated shop IDs'
         required: false
         default: 'pilot'
       compare:
@@ -19,6 +19,10 @@ on:
         default: true
       write_snapshot:
         description: 'Store Chromium results for the next Vercel batches'
+        type: boolean
+        default: false
+      diagnose:
+        description: 'Diagnose only: show which pages Chromium opens and what it sees (stores nothing)'
         type: boolean
         default: false
 
@@ -58,7 +62,13 @@ jobs:
       - name: Install Chromium system dependencies
         if: steps.chromium-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright-core install-deps chromium
+      - name: Diagnose browser cohort with local Chromium
+        if: github.event_name == 'workflow_dispatch' && inputs.diagnose
+        env:
+          ACTIONS_BROWSER_SHOPS: ${{ inputs.shops }}
+        run: node scripts/actions-browser-diagnose.mjs
       - name: Crawl browser cohort with local Chromium
+        if: github.event_name == 'schedule' || !inputs.diagnose
         env:
           ACTIONS_BROWSER_SHOPS: ${{ github.event_name == 'schedule' && 'all' || inputs.shops }}
           AB_COMPARE: ${{ github.event_name == 'schedule' && 'false' || inputs.compare }}
@@ -69,6 +79,6 @@ jobs:
         if: always()
         with:
           name: chromium-browser-crawl-${{ github.run_id }}
-          path: observability/actions-browser-summary.json
+          path: observability/actions-browser-*.json
           if-no-files-found: warn
           retention-days: 14

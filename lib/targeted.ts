@@ -6,9 +6,10 @@ import { extractHtmlFallback } from './extract';
 const BRAND_SLUG: Record<string,string> = {
   "Arc'teryx":"arcteryx","Odlo":"odlo","Dynafit":"dynafit","Ortovox":"ortovox",
   "La Sportiva":"la-sportiva","Mammut":"mammut","Norrøna":"norrona","Rab":"rab",
-  "Patagonia":"patagonia","Haglöfs":"hagloefs","Black Diamond":"black-diamond",
-  "Peak Performance":"peak-performance","Houdini":"houdini","Adidas Terrex":"adidas-terrex",
-  "66°North":"66-north","Goldwin":"goldwin","Tilak":"tilak","Stoic":"stoic"
+  "Patagonia":"patagonia","Haglöfs":"hagloefs","Fjällräven":"fjaellraven","Klättermusen":"klattermusen",
+  "Bergans":"bergans","Lundhags":"lundhags","Mountain Equipment":"mountain-equipment","Montura":"montura",
+  "Peak Performance":"peak-performance","Houdini":"houdini",
+  "66°North":"66-north","Goldwin":"goldwin","Tilak":"tilak"
 };
 
 export function targetedListingUrls(source: ShopSource): string[] {
@@ -52,7 +53,11 @@ function canonicalProductUrl(raw:string){
     return u.toString();
   }catch{return raw}
 }
+function fold(s:string){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ø/g,'o').replace(/æ/g,'ae').replace(/’/g,"'")}
 function findBrand(s:string){
+  const folded=fold(s);
+  const byFold=PROFILE.brands.find(b=>folded.includes(fold(b)));
+  if(byFold) return byFold;
   const low=s.toLowerCase();
   return PROFILE.brands.find(b=>low.includes(b.toLowerCase().replace('’',"'"))) ||
     PROFILE.brands.find(b=>low.includes(b.toLowerCase().replace(/[^a-z0-9]/g,''))) || '';

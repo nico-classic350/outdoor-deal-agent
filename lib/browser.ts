@@ -54,6 +54,10 @@ const PRODUCT_SELECTOR = [
   '[data-testid*="product"]',
   '[data-product-id]',
   '[data-product-sku]',
+  // Schema.org listing items (e.g. Rab/Hyvä) and Shopware 5 product boxes.
+  '[itemtype*="ListItem"]',
+  '[id^="product-card"]',
+  '[class*="product--box"]',
 ].join(',');
 
 export function browserFallbackConfigured() {
@@ -85,10 +89,15 @@ function numberFromText(value: string): number | undefined {
 }
 
 function euroPrices(value: string): number[] {
-  const result = [...String(value || '').matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)]
-    .map(match => numberFromText(match[1]))
+  // "119,95 €" (German) or "€119.95" (English) notation. A page uses one of
+  // them; mixing both patterns would pair a symbol with the wrong number.
+  // Other currencies are ignored.
+  const text = String(value || '');
+  const after = [...text.matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)].map(match => match[1]);
+  const matches = after.length ? after : [...text.matchAll(/(?:€|EUR)\s*(\d{1,4}(?:[.,]\d{2})?)/gi)].map(match => match[1]);
+  return matches
+    .map(value => numberFromText(value))
     .filter((x): x is number => Boolean(x));
-  return result;
 }
 
 function timeLeft(deadline: number, cap: number): number {
@@ -284,6 +293,14 @@ async function extractRenderedDomOffers(
       const imageEl = el.querySelector('img') as HTMLImageElement | null;
       const priceEl = el.querySelector('[itemprop="price"], [data-price], [data-testid*="price"], [class*="price"]') as HTMLElement | null;
       const priceAttr = priceEl?.getAttribute('content') || priceEl?.getAttribute('data-price') || '';
+      // A reference price is only evidence when the shop visibly strikes it
+      // through (computed style or <del>/<s>), not merely "the higher number".
+      const struck = Array.from(el.querySelectorAll('*')).find((node) => {
+        const n = node as HTMLElement;
+        const t = (n.innerText || '').trim();
+        if (!t || t.length > 30 || !/\d/.test(t) || n.children.length > 2) return false;
+        return n.tagName === 'DEL' || n.tagName === 'S' || getComputedStyle(n).textDecorationLine.includes('line-through');
+      }) as HTMLElement | undefined;
       return {
         href: anchor?.href || '',
         name: (nameEl?.innerText || anchor?.innerText || '').trim(),
@@ -291,6 +308,7 @@ async function extractRenderedDomOffers(
         image: imageEl?.currentSrc || imageEl?.src || imageEl?.getAttribute('data-src') || '',
         text: (el.innerText || '').trim(),
         priceText: `${priceAttr} ${priceEl?.innerText || ''}`.trim(),
+        struckText: (struck?.innerText || '').trim(),
       };
     }));
 
@@ -302,8 +320,12 @@ async function extractRenderedDomOffers(
       const attrPrice = numberFromText(row.priceText);
       const prices = textPrices.length ? textPrices : (attrPrice ? [attrPrice] : []);
       if (!prices.length) continue;
-      const price = Math.min(...prices);
-      const rrp = prices.length > 1 ? Math.max(...prices) : undefined;
+      const struckPrice = euroPrices(row.struckText)[0];
+      const current = prices.filter(value => value !== struckPrice);
+      const price = Math.min(...(current.length ? current : prices));
+      const rrp = struckPrice && struckPrice > price ? struckPrice : undefined;
+      const badge = Number(row.text.match(/(?:^|\s)[-–−]\s?(\d{1,2})\s?%/)?.[1] || 0);
+      const displayedDiscount = !rrp && badge >= 40 && badge < 100 ? badge : undefined;
       seen.add(row.href);
       out.push({
         sourceId: source.id,
@@ -315,7 +337,10 @@ async function extractRenderedDomOffers(
         name: row.name,
         currency: 'EUR',
         price,
-        rrp: rrp && rrp > price ? rrp : undefined,
+        rrp,
+        rrpSource: rrp ? 'html:struck-through-price' : undefined,
+        observedDiscountPct: displayedDiscount,
+        discountSource: displayedDiscount ? 'merchant:displayed-discount' : undefined,
         availability: /ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(row.text) ? 'out_of_stock' : 'unknown',
         description: row.text.slice(0, 800),
         sizes: [],
@@ -372,7 +397,23 @@ async function renderAndExtract(
   requireTime(deadline, 2500);
   const html = await page.content();
   let offers = parseRenderedHtml(source, url, html);
-  if (!offers.length) offers = await extractRenderedDomOffers(page, source, url);
+  const hasEvidence = (list: RawOffer[]) => list.some(o => o.rrpSource || o.discountSource);
+  if (!offers.length || offers.some(o => !o.rrpSource && !o.discountSource)) {
+    // The rendered DOM sees computed styles (struck-through prices) that static
+    // HTML parsing cannot; use it for evidence and for cards the parser missed.
+    const dom = await extractRenderedDomOffers(page, source, url);
+    if (!offers.length) offers = dom;
+    else if (hasEvidence(dom)) {
+      const byUrl = new Map(dom.map(o => [o.url, o]));
+      offers = offers.map(o => {
+        const d = byUrl.get(o.url);
+        return d && !o.rrpSource && !o.discountSource && Math.abs(Number(d.price) - Number(o.price)) < 0.011 && (d.rrpSource || d.discountSource)
+          ? { ...o, rrp: d.rrp, rrpSource: d.rrpSource, observedDiscountPct: d.observedDiscountPct, discountSource: d.discountSource } : o;
+      });
+      const known = new Set(offers.map(o => o.url));
+      offers.push(...dom.filter(o => !known.has(o.url)));
+    }
+  }
   offers = await enrichSingleOfferSizes(page, offers);
   return {
     offers,

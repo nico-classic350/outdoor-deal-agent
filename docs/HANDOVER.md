@@ -12,7 +12,7 @@
 
 | Schritt | Code/Ort | Ergebnis |
 | --- | --- | --- |
-| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 91 EU-Quellen, Marken und Auswahlprofil |
+| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 94 EU-Quellen, Premium-Markenliste und Auswahlprofil |
 | Erfassung | `lib/crawl.ts`, `lib/targeted.ts`, `lib/feed.ts`, `lib/globetrotter-feed.ts` | Direkte Listings, offizielle zugängliche Feeds, Sitemaps, HTML/JSON-LD |
 | Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 22:20 UTC Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
 | Browser-Fallback (optional) | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless nur noch opt-in (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0) |
@@ -67,7 +67,9 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 
 **Umstellung ohne Browserless (PR „Chromium browser crawl“):** Rendering läuft nun in GitHub Actions mit `playwright-core` und lokal installiertem Chromium. Einmalig erforderlich: (1) GitHub → Settings → Secrets and variables → Actions → Secret `BROWSER_SNAPSHOT_DATABASE_URL` anlegen (Neon-Verbindung, idealerweise eigene Rolle nur für `agent_browser_snapshots`). (2) In Vercel Production `BROWSERLESS_DAILY_SESSION_LIMIT` entfernen oder auf `0` setzen; `BROWSERLESS_API_TOKEN` kann gelöscht werden. (3) Den Workflow manuell mit `shops=pilot`, `compare=true` starten und das A/B-Ergebnis prüfen, bevor man sich auf den nächtlichen Lauf verlässt. Geplante GitHub-Workflows können sich verspäten und werden nach 60 Tagen ohne Repository-Aktivität deaktiviert; die Batches laufen dann ohne Browserdaten weiter.
 
-**Offener Betriebsfehler:** In Browserless einen gültigen API-Token und den Accountstatus prüfen, `BROWSERLESS_API_TOKEN` in Vercel Production kontrollieren, neue Production-Deployment-Version auslösen. Dann `/api/browser-check` einmal aufrufen (kostet höchstens eine Browserless-Sitzung) oder einen kleinen schreibfreien `pnpm smoke:browser`-Test mit lokal bereitgestelltem Token oder den nächsten begrenzten Produktionsbatch auswerten. Erfolg ist an tatsächlichem HTTP 200/Browser-Extraktion erkennbar, nicht am Konfigurationsflag. Bis dahin erzeugt der direkte Crawl weiterhin den täglichen Bericht und die E-Mail.
+**Erledigt (30. September):** Browserless ist abgeschaltet; `BROWSERLESS_API_TOKEN` wurde in Vercel Production gelöscht und neu deployt. Das Rendering läuft nächtlich in GitHub Actions (Chromium). Der Browserless-Code bleibt als optionaler Pfad bestehen (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0); `/api/browser-check` meldet ohne Token nur „nicht konfiguriert“.
+
+**Markenliste (30. September):** Nur Premium-Marken mit nachweislich hochwertigen Materialien. Entfernt: Stoic (Bergfreunde-Eigenmarke, gemischte Bewertungen zur Materialhaltbarkeit), Adidas Terrex (Massenmarkt), Black Diamond (Schwerpunkt Hartware). Neu: Fjällräven, Klättermusen, Bergans, Lundhags, Mountain Equipment, Montura. Der Black-Diamond- und der Adidas-Terrex-Shop wurden im Register durch Fjällräven und Lundhags ersetzt; Bergans, Klättermusen und Montura kamen hinzu (94 Shops, weiterhin 16 Batches).
 
 ## Übernahme und Prüfung
 

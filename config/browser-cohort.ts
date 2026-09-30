@@ -11,11 +11,15 @@ export const BROWSER_COHORT = {
     'aboutyou-de', 'bestsecret', 'odlo-eu', 'patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
     'peakperformance-eu', 'goldwin-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
+    // Premium brand stores added with the September 2026 brand review.
+    // (fjallraven-eu is Cloudflare-protected, montura-eu shows a closed-store
+    // password page; both were surveyed on 30 September 2026.)
+    'lundhags-eu', 'bergans-eu', 'klattermusen-eu',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
     'ekosport', 'vieux-campeur', '8a', 'e-horyzont', 'sportler', 'oliunid', 'nencini', 'galeria',
-    'ortovox-eu', 'lasportiva-eu', 'adidas-terrex-de',
+    'ortovox-eu', 'lasportiva-eu', 'fjallraven-eu',
   ],
   // Small fixed cohort for A/B measurements (direct-only vs. direct + Chromium).
   pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'peakperformance-eu', 'trekkinn', 'outdoor-renner'],
@@ -25,6 +29,39 @@ export function browserCohort(selection = 'all'): string[] {
   if (selection === 'pilot') return [...BROWSER_COHORT.pilot];
   if (selection === 'render') return [...BROWSER_COHORT.render];
   if (selection === 'blocked') return [...BROWSER_COHORT.blocked];
-  if (selection === 'all' || !selection) return [...BROWSER_COHORT.render, ...BROWSER_COHORT.blocked];
+  // The nightly run skips the blocked group: the 30 September 2026 survey showed
+  // every one of them behind Cloudflare/Akamai bot protection for a datacenter
+  // browser (403 "Nur einen Moment…"), and the crawler does not evade that.
+  if (selection === 'all' || !selection) return [...BROWSER_COHORT.render];
+  if (selection === 'everything') return [...BROWSER_COHORT.render, ...BROWSER_COHORT.blocked];
   return selection.split(',').map(id => id.trim()).filter(Boolean);
+}
+
+// Listing pages Chromium opens first. Many brand shops expose no usable
+// sitemap, so without these the crawler rendered only the start page (no
+// product list). EU/German locales are spelled out because the GitHub runner
+// sits in the US and bare domains geo-redirect to US/UK stores. Verified with
+// the diagnose mode of browser-crawl.yml on 30 September 2026.
+export const BROWSER_START_URLS: Record<string, string[]> = {
+  // Outlet first: struck-through prices there are the reference-price evidence.
+  'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/herren/hosen-tights', 'https://www.odlo.com/de-de/c/herren/kleidung/hosen-tights'],
+  'rab-eu': ['https://rab.equipment/eu/mens/pants'],
+  'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/', 'https://www.norrona.com/de-DE/produkte/herren/hosen/'],
+  // /de is the euro store; /en serves GBP to the US runner.
+  'haglofs-eu': ['https://www.haglofs.com/de/herren/hosen-herren/hosen-lange-hosen-herren'],
+  // Sale first, then Kurzgrößen (inseam fits the profile better than Übergrößen).
+  // From the all-shop survey (diagnose run, 30 September 2026): outlet/sale
+  // pages with struck-through prices first, then men's trousers listings.
+  'sportfits': ['https://sportfits.de/sale?p=1&minDiscount=50&o=15', 'https://sportfits.de/urban-fashion-herren-hosen'],
+  'camp4': ['https://www.camp4.de/outlet/', 'https://www.camp4.de/outdoor-hosen/?p=1&o=1&n=48&f=2'],
+  'snowcountry': ['https://www.snowcountry.eu/outlet/outlet-heren.html'],
+  'feinbier': ['https://www.feinbier-unterwegs.de/outlet/', 'https://www.feinbier-unterwegs.de/herren/bekleidung/hosen/'],
+  'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
+  'lundhags-eu': ['https://lundhags.com/eu/category/outlet', 'https://lundhags.com/eu/category/clothing/men/pants'],
+  'klattermusen-eu': ['https://www.klattermusen.com/de-de/men/pants/'],
+  'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
+};
+
+export function browserStartUrls(shopId: string): string[] {
+  return BROWSER_START_URLS[shopId] ? [...BROWSER_START_URLS[shopId]] : [];
 }

@@ -73,3 +73,104 @@ test('local Chromium renders JavaScript product cards', { skip: !existsSync(chro
     process.env = saved;
   }
 });
+
+test('local Chromium reads listing-item and Shopware cards with euro prefix prices', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><body><main>
+    <div itemprop="itemListElement" itemscope itemtype="http://schema.org/ListItem" id="product-card-1">
+      <a href="/eu/mens-incline-pants"><img src="/a.jpg"><h3>Rab Incline AS Pants Men</h3></a>
+      <span class="old">€130.00</span> <span class="price">€77.95</span></div>
+    <div class="product--box box--minimal"><a class="product--title" href="/wanderhose-xxl">Maier Sports Nil Hose Herren</a>
+      <span class="price--default">59,95 €</span> <span class="price--pseudo">UVP 99,95 €</span></div>
+    <div itemscope itemtype="http://schema.org/ListItem"><a href="/eu/sale">Sale</a></div>
+    <div class="product--box"><a href="/us-only">Trekking Pants</a><span>$ 49.99</span></div>
+  </main></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/eu/mens/pants`;
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { browserExtract } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const source = { id: 'rab-eu', name: 'Rab', country: 'NL', baseUrl: url, priority: 1 };
+    const result = await browserExtract(source, url, { deadline: Date.now() + 30000 });
+    const byName = Object.fromEntries(result.offers.map(o => [o.name, o]));
+    assert.equal(byName['Rab Incline AS Pants Men']?.price, 77.95);
+    assert.equal(byName['Maier Sports Nil Hose Herren']?.price, 59.95);
+    assert.ok(!result.offers.some(o => o.url.endsWith('/us-only')), 'non-euro prices are ignored');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});
+
+test('browser start URLs are same-shop listing pages', async () => {
+  const { BROWSER_START_URLS } = require('../config/browser-cohort.ts');
+  const { SHOPS } = require('../config/shops.ts');
+  for (const [id, urls] of Object.entries(BROWSER_START_URLS)) {
+    const shop = SHOPS.find(s => s.id === id);
+    assert.ok(shop, `${id} exists`);
+    for (const u of urls) assert.equal(new URL(u).hostname.replace(/^www\./, ''), new URL(shop.baseUrl).hostname.replace(/^www\./, ''), `${u} stays on ${id}`);
+  }
+});
+
+test('outlet cards keep the struck-through price as reference-price evidence', () => {
+  const { extractHtmlFallback } = require('../lib/extract.ts');
+  const html = `<main><article id="product-1"><a href="/de-de/p/ascent-hose-1.html"><img src="/i.jpg"></a>
+    <div>-45 %</div><h3>Odlo Ascent Light Wanderhose Herren</h3>
+    <p class="flex font-bold"><span>60,45 €</span> <span class="line-through text-grey-40">109,95 €</span></p></article>
+    <article id="product-2"><a href="/p/full.html"></a><h3>Odlo Brensholmen Hose</h3><p><span>89,95 €</span></p></article></main>`;
+  const source = { id: 'odlo-eu', name: 'Odlo EU', country: 'DE', baseUrl: 'https://www.odlo.com', priority: 1 };
+  const [discounted, full] = extractHtmlFallback(html, source, 'https://www.odlo.com/de-de/c/outlet/herren/hosen-tights');
+  assert.equal(discounted.price, 60.45);
+  assert.equal(discounted.rrp, 109.95);
+  assert.equal(discounted.rrpSource, 'html:marked-reference-price');
+  assert.equal(full.rrp, undefined);
+});
+
+test('single-brand store names are valid profile brands', () => {
+  const { SHOP_BRAND, SHOPS } = require('../config/shops.ts');
+  const { PROFILE } = require('../config/profile.ts');
+  for (const [id, brand] of Object.entries(SHOP_BRAND)) {
+    assert.ok(SHOPS.some(s => s.id === id), `${id} exists`);
+    assert.ok(PROFILE.brands.includes(brand), `${brand} is a profile brand`);
+  }
+});
+
+test('rendered cards use visually struck-through prices and discount badges as evidence', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><style>.was{text-decoration:line-through}</style></head><body><main>
+    <div class="product-tile"><a href="/p/keb-trousers">Fjällräven Keb Trousers M Wanderhose</a>
+      <span class="now">119,95 €</span> <span class="was">239,95 €</span></div>
+    <div class="product-tile"><a href="/p/abisko">Fjällräven Abisko Trekking Trousers M</a>
+      <span class="badge">-45 %</span> <span>98,95 €</span></div>
+    <div class="product-tile"><a href="/p/vidda">Fjällräven Vidda Pro Trousers M</a>
+      <span>129,95 €</span> <span>ab 150,00 €</span></div>
+  </main></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/herren/hosen`;
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { browserExtract } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const source = { id: 'fjallraven-eu', name: 'Fjällräven EU', country: 'SE', baseUrl: url, priority: 1 };
+    const result = await browserExtract(source, url, { deadline: Date.now() + 30000 });
+    const byPath = Object.fromEntries(result.offers.map(o => [new URL(o.url).pathname, o]));
+    assert.equal(byPath['/p/keb-trousers']?.price, 119.95);
+    assert.equal(byPath['/p/keb-trousers']?.rrp, 239.95);
+    assert.equal(byPath['/p/keb-trousers']?.rrpSource, 'html:struck-through-price');
+    assert.equal(byPath['/p/abisko']?.observedDiscountPct, 45);
+    assert.equal(byPath['/p/abisko']?.discountSource, 'merchant:displayed-discount');
+    assert.equal(byPath['/p/vidda']?.rrpSource, undefined, 'an unmarked higher price is not evidence');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});

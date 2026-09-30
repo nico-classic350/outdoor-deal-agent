@@ -9,10 +9,12 @@ import { llmExtractFromHtml } from './llm-extract';
 import { productEligible } from './product-rules.mjs';
 import { rankDiscoveryUrls } from './discovery.mjs';
 import robotsParser from 'robots-parser';
+import { browserStartUrls } from '../config/browser-cohort';
+import { SHOP_BRAND } from '../config/shops';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
-const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
+const BRAND_TERMS=PROFILE.brands.flatMap(x=>[x.toLowerCase(),x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ø/g,'o')]);
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
@@ -76,6 +78,13 @@ async function sitemapUrls(source:ShopSource, deadline=Date.now()+15000):Promise
 }
 
 export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
+  const result=await crawlSourceUnbranded(source);
+  const storeBrand=SHOP_BRAND[source.id];
+  if(storeBrand) for(const offer of result.offers) if(!offer.brand) offer.brand=storeBrand;
+  return result;
+}
+
+async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[],coverage:SourceCoverage}> {
   const start=Date.now(); const deadline=start+SOURCE_BUDGET_MS; let discovered:string[]=[]; const offers:RawOffer[]=[];
   const expandedDiscovery=process.env.DISCOVERY_STRATEGY==='expanded' ||
     (process.env.DISCOVERY_STRATEGY!=='baseline' && source.id==='bergfreunde');
@@ -248,7 +257,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
             technicalPath.push('browser-fallback-disabled');
             return {offers,coverage:coverage('blocked',`HTTP ${r.status}; Browserless token not configured`)};
           }
-          const succeeded=await browserFallback([url],true);
+          const succeeded=await browserFallback([...browserStartUrls(source.id),url],true);
           return {offers,coverage:coverage(succeeded?'browser':'blocked',succeeded?'Browserless unblock/Playwright fallback succeeded':`HTTP ${r.status}; Browserless fallback returned no parseable product data`)};
         }
         if(!r.ok) continue;
@@ -285,7 +294,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         if (!earlyBrowserTried && !offers.some(o=>productEligible(o.name,o.description)) && browserFallbackConfigured() && parseEmptyHttp200 >= EARLY_BROWSER_EMPTY_HTTP_THRESHOLD && enoughBudgetForBrowser) {
           earlyBrowserTried = true;
           technicalPath.push('browser-early-escalation');
-          const succeeded = await browserFallback([url], false);
+          const succeeded = await browserFallback([...browserStartUrls(source.id), url], false);
           if (succeeded) {
             return { offers, coverage: coverage('browser', 'Early Browserless rendered-page/Playwright fallback succeeded after parse-empty HTTP pages') };
           }
@@ -310,7 +319,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('browser-already-attempted');
         return {offers,coverage:coverage(offers.length?'partial':'failed','Browser fallback already attempted for this shop')};
       }
-      const candidates=discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl];
+      const candidates=[...browserStartUrls(source.id),...(discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl])];
       const succeeded=await browserFallback(candidates,false);
       return {offers,coverage:coverage(succeeded?'browser':offers.length?'partial':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':offers.length?'Products parsed, but no verified reference price':'No parseable data after Browserless fallback')};
     }

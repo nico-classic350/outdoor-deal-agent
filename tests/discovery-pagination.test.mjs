@@ -23,7 +23,7 @@ test('pagination follows only an explicit next page of the same listing',()=>{
 test('expanded discovery adds unique relevant observations without changing baseline path',async()=>{
   const originalFetch=globalThis.fetch, old=process.env.DISCOVERY_STRATEGY;
   const base='https://www.bergfreunde.de/outlet/outdoor-hosen/fuer--maenner/';
-  const page=(start,next)=>Array.from({length:8},(_,i)=>`<article class="product-card"><a href="/stoic-wanderhose-${start+i}/">Stoic Wanderhose Herren ${start+i}</a><span>69,95 €</span></article>`).join('')+
+  const page=(start,next)=>Array.from({length:8},(_,i)=>`<article class="product-card"><a href="/lundhags-wanderhose-${start+i}/">Lundhags Wanderhose Herren ${start+i}</a><span>69,95 €</span></article>`).join('')+
     (next?'<nav><a rel="next" href="/outlet/outdoor-hosen/fuer--maenner/2/">Weiter</a></nav>':'');
   globalThis.fetch=async url=>{
     const u=String(url);
