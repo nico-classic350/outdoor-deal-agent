@@ -140,36 +140,33 @@ const CANDIDATES = {
 };
 
 const report = [];
+const extractAt = async (source, url) => {
+  const r = await originalExtract(source, url, { deadline: Date.now() + 45000 });
+  return { url, offers: r.offers.length, withReference: r.offers.filter(o => o.rrpSource || o.discountSource).length,
+    httpStatus: r.httpStatus ?? null, steps: (r.steps || []).slice(0, 6),
+    sample: r.offers.slice(0, 3).map(o => ({ name: o.name, brand: o.brand ?? null, price: o.price, rrp: o.rrp ?? null })) };
+};
+const compactPage = p => ({ requested: p.requested, finalUrl: p.finalUrl, httpStatus: p.httpStatus, title: p.title, error: p.error,
+  currencies: p.currencies, consentVisible: p.consentVisible, blockedHint: p.blockedHint, euroSnippets: (p.euroSnippets || []).slice(0, 3),
+  categoryLinks: (p.categoryLinks || []).slice(0, 8).map(l => l.href), saleLinks: (p.saleLinks || []).slice(0, 8).map(l => l.href),
+  localeLinks: (p.localeLinks || []).slice(0, 6).map(l => l.href), firstCardPrices: p.cardSamples?.[0]?.priceNodes?.slice(0, 5) ?? [] });
+const menTrousers = href => TROUSERS.test(href) && MEN.test(href) && !WOMEN.test(href);
 for (const id of browserCohort(selection)) {
   const source = SHOPS.find(shop => shop.id === id);
   if (!source) { console.log(`[diagnose] unknown shop ${id}`); continue; }
-  const before = handed.length;
-  const { offers, coverage } = process.env.DIAGNOSE_SKIP_CRAWL ? { offers: [], coverage: { status: 'skipped', technicalPath: [], httpStatuses: [] } } : await crawlSource(source);
-  const escalations = handed.slice(before).map(h => ({ ...h, steps: h.steps.slice(0, 10) }));
-  const start = process.env.DIAGNOSE_SKIP_CRAWL ? { categoryLinks: [] } : await inspect(source.baseUrl);
-  const rendered = [];
-  for (const h of escalations.slice(0, 2)) if (h.url !== source.baseUrl) rendered.push(await inspect(h.url));
-  // Try the best-looking men's trousers link from the start page through the real extractor.
-  const candidate = start.categoryLinks?.[0]?.href;
-  let candidateResult = null;
-  if (candidate) {
-    const r = await originalExtract(source, candidate, { deadline: Date.now() + 45000 });
-    candidateResult = { url: candidate, offers: r.offers.length, httpStatus: r.httpStatus ?? null, steps: (r.steps || []).slice(0, 10),
-      sample: r.offers.slice(0, 3).map(o => ({ name: o.name, price: o.price, rrp: o.rrp ?? null })) };
-  }
-  const candidatePages = [];
-  for (const url of CANDIDATES[id] || []) {
-    const page = await inspect(url);
-    const r = await originalExtract(source, url, { deadline: Date.now() + 45000 });
-    candidatePages.push({ ...page, extractor: { offers: r.offers.length, httpStatus: r.httpStatus ?? null, steps: (r.steps || []).slice(0, 8),
-      sample: r.offers.slice(0, 3).map(o => ({ name: o.name, price: o.price, rrp: o.rrp ?? null, currency: o.currency })) } });
-  }
-  const entry = {
-    shop: id, baseUrl: source.baseUrl,
-    crawl: { status: coverage.status, rawOffers: offers.length, discoveredUrls: coverage.discoveredUrls, httpStatuses: coverage.httpStatuses,
-      path: (coverage.technicalPath || []).filter(s => !s.startsWith('browser-elapsed')).slice(0, 25) },
-    escalations, start, rendered, candidateResult, candidatePages,
-  };
+  const pages = [];
+  for (const url of [source.baseUrl, ...(CANDIDATES[id] || [])]) pages.push(await inspect(url));
+  const links = pages.flatMap(p => p.categoryLinks || []).map(l => l.href);
+  const sales = pages.flatMap(p => p.saleLinks || []).map(l => l.href);
+  const tried = new Set();
+  const targets = [
+    ...(CANDIDATES[id] || []),
+    links.find(menTrousers) || links[0],
+    sales.find(menTrousers) || sales.find(h => MEN.test(h) && !WOMEN.test(h)) || sales[0],
+  ].filter(u => u && !u.includes('#') && !tried.has(u) && tried.add(u)).slice(0, 4);
+  const extracted = [];
+  for (const url of targets) extracted.push(await extractAt(source, url));
+  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
 }
@@ -178,11 +175,10 @@ await closeLocalBrowser();
 mkdirSync('observability', { recursive: true });
 writeFileSync('observability/actions-browser-diagnose.json', JSON.stringify(report, null, 2) + '\n');
 if (process.env.GITHUB_STEP_SUMMARY) {
-  const lines = ['## Chromium browser diagnosis', '', '| Shop | Crawl path | URL given to Chromium | Offers there | Start page title | Consent | Best trousers link | Offers there |', '| --- | --- | --- | ---: | --- | --- | --- | ---: |'];
+  const lines = ['## Chromium browser diagnosis', '', '| Shop | Start page | Currency | Best page | Offers | With reference |', '| --- | --- | --- | --- | ---: | ---: |'];
   for (const r of report) {
-    const esc = r.escalations[0];
-    const path = r.crawl.path.find(s => /base-url-fallback|sitemap-urls|targeted/.test(s)) || '';
-    lines.push(`| ${r.shop} | ${path} | ${esc ? new URL(esc.url).pathname : '—'} | ${esc?.offers ?? '—'} | ${(r.start.title || r.start.error || '').replace(/\|/g, '/')} | ${(r.start.consentVisible || []).join(' ') || '—'} | ${r.candidateResult ? new URL(r.candidateResult.url).pathname : '—'} | ${r.candidateResult?.offers ?? '—'} |`);
+    const best = [...r.extracted].sort((a, b) => b.withReference - a.withReference || b.offers - a.offers)[0];
+    lines.push(`| ${r.shop} | ${(r.pages[0].title || r.pages[0].error || '').replace(/\|/g, '/').slice(0, 50)} | ${(r.pages[0].currencies || []).join(' ')} | ${best ? new URL(best.url).pathname : '—'} | ${best?.offers ?? '—'} | ${best?.withReference ?? '—'} |`);
   }
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
 }
