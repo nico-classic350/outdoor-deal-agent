@@ -214,7 +214,7 @@ for (const id of diagnoseIds) {
   for (const url of (sitemaps.length ? sitemaps : [`${origin}/sitemap.xml`]).slice(0, 2)) {
     const s = await readText(url);
     const locs = [...s.text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1]);
-    publicFiles.push({ label: 'sitemap', url, status: s.status, type: s.type.slice(0, 40), locs: locs.length,
+    publicFiles.push({ label: 'sitemap', url, status: s.status, type: (s.type || '').slice(0, 40), error: s.error, locs: locs.length,
       sample: locs.filter(l => TROUSERS.test(l)).slice(0, 3).concat(locs.slice(0, 2)).slice(0, 4),
       priceTags: /<(?:g:price|price|sale_price)>/i.test(s.text) });
   }
