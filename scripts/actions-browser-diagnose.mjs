@@ -47,7 +47,13 @@ async function inspect(url) {
   try {
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     info.httpStatus = response?.status() ?? null;
-    await page.waitForTimeout(4000);
+    await page.waitForTimeout(2000);
+    // Same consent handling as the crawler.
+    try {
+      const button = page.getByRole('button', { name: /^(alle akzeptieren|akzeptieren|zustimmen|accept all|accept|agree|allow all|alle zulassen|allow all cookies)$/i }).first();
+      if (await button.count() && await button.isVisible()) { await button.click({ timeout: 1500 }); info.consentClicked = true; }
+    } catch {}
+    await page.waitForTimeout(3000);
     for (const fraction of [0.5, 1]) {
       await page.evaluate(f => window.scrollTo(0, document.body.scrollHeight * f), fraction).catch(() => {});
       await page.waitForTimeout(800);
@@ -67,7 +73,7 @@ async function inspect(url) {
       const links = [...document.querySelectorAll('a[href]')].map(a => ({ href: a.href, text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60) }))
         .filter(l => l.href.startsWith(location.origin));
       const categoryLinks = [...new Map(links.filter(l => T.test(l.href + ' ' + l.text) && !W.test(l.href + ' ' + l.text))
-        .sort((a, b) => Number(M.test(b.href + b.text)) - Number(M.test(a.href + a.text))).map(l => [l.href, l])).values()].slice(0, 12);
+        .sort((a, b) => Number(M.test(b.href + b.text)) - Number(M.test(a.href + a.text))).map(l => [l.href, l])).values()].slice(0, 20);
       return {
         finalUrl: location.href,
         title: document.title.slice(0, 100),
@@ -79,6 +85,29 @@ async function inspect(url) {
         consentVisible: consent,
         blockedHint: /access denied|captcha|are you a robot|verify you are human|cloudflare|forbidden/i.test(text.slice(0, 3000)),
         categoryLinks,
+        currencies: [...new Set((text.match(/€|EUR|USD|\$|£|GBP|SEK|NOK|DKK|CHF/g) || []))],
+        cardSamples: (() => {
+          // Smallest elements carrying a price, climbed up to a card with a link and an image.
+          const priced = [...document.querySelectorAll('body *')].filter(el => el.children.length <= 2 &&
+            /\d[\d.,]*\s?(€|EUR|\$|£|kr)|(€|\$|£)\s?\d/.test(el.textContent || '') && (el.textContent || '').length < 40).slice(0, 60);
+          const cards = [];
+          for (const el of priced) {
+            let card = el;
+            for (let i = 0; i < 8 && card.parentElement; i++) {
+              if (card.querySelector('a[href]') && card.querySelector('img')) break;
+              card = card.parentElement;
+            }
+            if (cards.includes(card) || !card.querySelector('a[href]')) continue;
+            cards.push(card);
+            if (cards.length >= 2) break;
+          }
+          return cards.map(card => {
+            const clone = card.cloneNode(true);
+            clone.querySelectorAll('svg,script,style,noscript,source').forEach(n => n.remove());
+            clone.querySelectorAll('*').forEach(n => { for (const a of [...n.attributes]) if (!/^(class|href|itemprop|itemtype|data-testid|data-price|content|aria-label)$/.test(a.name)) n.removeAttribute(a.name); });
+            return { tag: card.tagName.toLowerCase(), html: clone.outerHTML.replace(/\s+/g, ' ').slice(0, 1400) };
+          });
+        })(),
       };
     }, { trousers: TROUSERS.source, men: MEN.source, women: WOMEN.source }));
   } catch (error) {
@@ -88,6 +117,20 @@ async function inspect(url) {
   }
   return info;
 }
+
+// Candidate listing pages (EU locale spelled out: the runner is in the US and
+// shops geo-redirect bare domains). Found in the first diagnosis run or guessed
+// from the shops' URL schemes; this run verifies them.
+const CANDIDATES = {
+  'patagonia-eu': ['https://eu.patagonia.com/de/de/shop/mens-pants', 'https://eu.patagonia.com/de/de/shop/web-specials-mens'],
+  'rab-eu': ['https://rab.equipment/eu/mens/pants', 'https://rab.equipment/eu/sale/mens'],
+  'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/', 'https://www.norrona.com/de-DE/produkte/herren/hosen/'],
+  'haglofs-eu': ['https://www.haglofs.com/de-de/men/bottoms-men/bottoms-trousers-men', 'https://www.haglofs.com/en/men/bottoms-men/bottoms-trousers-men'],
+  'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/men/pants-tights', 'https://www.odlo.com/de-de/c/men/apparel/pants-tights'],
+  'outdoor-renner': ['https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/', 'https://www.outdoor-renner.de/outdoorhosen-herren-uebergroessen/'],
+  'trekkinn': ['https://www.tradeinn.com/trekkinn/de'],
+  'peakperformance-eu': [],
+};
 
 const report = [];
 for (const id of browserCohort(selection)) {
@@ -107,11 +150,18 @@ for (const id of browserCohort(selection)) {
     candidateResult = { url: candidate, offers: r.offers.length, httpStatus: r.httpStatus ?? null, steps: (r.steps || []).slice(0, 10),
       sample: r.offers.slice(0, 3).map(o => ({ name: o.name, price: o.price, rrp: o.rrp ?? null })) };
   }
+  const candidatePages = [];
+  for (const url of CANDIDATES[id] || []) {
+    const page = await inspect(url);
+    const r = await originalExtract(source, url, { deadline: Date.now() + 45000 });
+    candidatePages.push({ ...page, extractor: { offers: r.offers.length, httpStatus: r.httpStatus ?? null, steps: (r.steps || []).slice(0, 8),
+      sample: r.offers.slice(0, 3).map(o => ({ name: o.name, price: o.price, rrp: o.rrp ?? null, currency: o.currency })) } });
+  }
   const entry = {
     shop: id, baseUrl: source.baseUrl,
     crawl: { status: coverage.status, rawOffers: offers.length, discoveredUrls: coverage.discoveredUrls, httpStatuses: coverage.httpStatuses,
       path: (coverage.technicalPath || []).filter(s => !s.startsWith('browser-elapsed')).slice(0, 25) },
-    escalations, start, rendered, candidateResult,
+    escalations, start, rendered, candidateResult, candidatePages,
   };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
