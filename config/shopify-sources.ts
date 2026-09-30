@@ -9,5 +9,7 @@ export const SHOPIFY_SOURCES: Record<string, ShopifySource> = {
   'df-sport': { origin: 'https://df-sportspecialist.it', collections: ['prodotti-in-offerta', 'montagna'], currency: 'EUR' },
   // Goldwin Europe renders prices the browser path misreads; its JSON is exact.
   'goldwin-eu': { origin: 'https://eu.goldwin.global', collections: ['men-bottoms-full-length', 'sale-24ss'], currency: 'EUR', brand: 'Goldwin' },
+  // Sport Förg: large German retailer; sale first, then all trousers (brand from vendor).
+  'foerg': { origin: 'https://foerg.de', collections: ['sale', 'hosen'], currency: 'EUR' },
   'sportit': { origin: 'https://www.sportit.com', collections: ['promo-outlet', 'pantaloni-abbigliamento'], currency: 'EUR' },
 };

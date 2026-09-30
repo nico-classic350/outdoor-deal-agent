@@ -348,6 +348,15 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         return {offers,coverage:coverage(offers.length?'partial':'failed',offers.length?'Products parsed, but no verified reference price':'No parseable data; Browserless token not configured')};
       }
       if(offers.some(o=>productEligible(o.name,o.description))){
+        // The nightly GitHub Actions browser has no per-session cost: when direct
+        // pages found products but no price evidence, render the shop's configured
+        // sale/outlet pages, which carry the struck-through prices.
+        const startUrls=browserStartUrls(source.id);
+        if(browserFallbackMode()==='local-playwright' && startUrls.length && !browserAttempted){
+          technicalPath.push('browser-start-pages-for-evidence');
+          const succeeded=await browserFallback(startUrls,false);
+          return {offers,coverage:coverage(succeeded?'browser':'partial',succeeded?'Sale/outlet pages rendered for price evidence':'Relevant products parsed, but no verified reference price')};
+        }
         technicalPath.push('browser-skipped-existing-products');
         return {offers,coverage:coverage('partial','Relevant products parsed; browser session reserved for empty or blocked shops')};
       }
