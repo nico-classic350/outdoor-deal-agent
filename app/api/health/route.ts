@@ -28,7 +28,6 @@ export async function GET() {
     deploymentSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
     sourceCount: SHOPS.length,
     expectedBatches: BATCH_COUNT,
-    awinConfigured: Boolean(process.env.AWIN_DATAFEED_API_KEY),
     browserFallbackConfigured: browser.configured,
     browserFallbackMode: browser.mode,
     browserFallbackRegion: browser.baseUrl ? new URL(browser.baseUrl).hostname : null,
@@ -69,6 +68,8 @@ export async function GET() {
     const batchTablePresent = Boolean(tables[0]?.batch_table);
     const runTablePresent = Boolean(tables[0]?.run_table);
     let batchRowsToday = 0;
+    let browserProviderAuthRejectedSources = 0;
+    let browserRecoveredSources = 0;
     let latestFinalizedAt: string | null = null;
     let latestFinalizedRunDate: string | null = null;
     let emailDeliveryStatus = 'no-report-today';
@@ -82,6 +83,13 @@ export async function GET() {
         WHERE run_date = ${runDate}
       `;
       batchRowsToday = Number(rows[0]?.count || 0);
+      const browserRows = await sql`SELECT coverage FROM agent_batch_runs WHERE run_date=${runDate}`;
+      for (const batch of browserRows) {
+        for (const source of Array.isArray(batch.coverage) ? batch.coverage : []) {
+          if (source.technicalPath?.includes('browser-provider-auth-rejected')) browserProviderAuthRejectedSources++;
+          if (source.technicalPath?.includes('browser-success')) browserRecoveredSources++;
+        }
+      }
     }
 
     if (runTablePresent) {
@@ -134,6 +142,9 @@ export async function GET() {
         batchTablePresent,
         runTablePresent,
         batchRowsToday,
+        browserProviderStatus: !browser.configured ? 'disabled' : browserProviderAuthRejectedSources ? 'auth-rejected' : browserRecoveredSources ? 'recovered-products' : 'configured-no-recovery',
+        browserProviderAuthRejectedSources,
+        browserRecoveredSources,
         batchesComplete,
         finalizedToday,
         latestFinalizedAt,

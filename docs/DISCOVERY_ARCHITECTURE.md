@@ -12,7 +12,7 @@ visible uncertainty, not a reason to exclude a deal.
 
 1. **Source registry**: per-shop country, host, discovery adapter, tested sale/
    men's-trouser category URLs, feed availability and a request budget.
-2. **Cheap discovery**: authorized merchant/affiliate feeds first; then targeted
+2. **Cheap discovery**: accessible merchant feeds first; then targeted
    sale/category listings and sitemaps. Score discovered URLs for relevance and
    deduplicate before fetching. Persist per-path attempt and product counts.
 3. **Direct extraction**: parse listing cards, JSON-LD and embedded product
@@ -121,7 +121,7 @@ listing record pairs both fields. This historical pilot is not a new live
 measurement. For 4camping, 174 raw observations had zero verified price evidence;
 127 failed allowed-brand identification and 47 the discount-evidence check.
 
-Next high-leverage work is merchant/affiliate feed onboarding, variant-aware
+Next high-leverage work is accessible merchant feed onboarding, variant-aware
 detail adapters with real availability, and a token-validated Browserless
 pilot on a few otherwise empty shops. Each needs a separate bounded A/B test.
 An invalid Browserless credential now opens a function-scoped circuit after
@@ -146,3 +146,13 @@ direct requests, four request errors and HTTP 200/502, so the previous
 29-offer pilot is not an exact same-time A/B baseline. Browserless did not
 run, and the refreshed production credential's validity is not inferred from
 this result.
+
+## Operational update, 30 September 2026
+
+Awin advertiser admission was declined; its feed path has been removed.
+Today's 91-shop production batch produced 1,671 raw and 138 normalized offers
+via direct/merchant paths. Browserless was configured but recovered zero shops:
+72 of 73 shops that attempted a browser fallback recorded provider-auth
+rejection, including HTTP 401 from `/unblock` and `/content`. The revised
+health response exposes this distinction. Restoring the credential and
+re-running a bounded pilot remains an open operation, not a completed test.

@@ -5,7 +5,6 @@ import { ingestFeed } from './feed';
 import { browserExtract, browserFallbackConfigured, browserFallbackMode } from './browser';
 import { targetedListingUrls, extractTargetedListing, nextListingPage } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
-import { ingestAwinProductFeed } from './awin-feed';
 import { llmExtractFromHtml } from './llm-extract';
 import { productEligible } from './product-rules.mjs';
 import { rankDiscoveryUrls } from './discovery.mjs';
@@ -140,25 +139,6 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
       }catch(e:any){
         technicalPath.push('official-affiliate-feed-failed');
       }
-    }
-
-    technicalPath.push('awin-check');
-    try{
-      const awin=await ingestAwinProductFeed(source,deadline);
-      if(awin.configured){
-        technicalPath.push('awin-product-feed');
-        if(awin.offers.length){
-          offers.push(...awin.offers);
-          discovered=['awin-product-feed'];
-          technicalPath.push('awin-product-feed-success');
-          return {offers,coverage:coverage('success',awin.note)};
-        }
-        technicalPath.push('awin-feed-empty');
-      } else {
-        technicalPath.push('awin-not-configured-or-unmapped');
-      }
-    }catch(e:any){
-      technicalPath.push('awin-feed-failed');
     }
 
     const targeted=targetedListingUrls(source);

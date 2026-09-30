@@ -89,23 +89,6 @@ test('variant-specific L in stock and an explicit merchant discount are extracte
   assert.equal(offer.rrp,undefined);
 });
 
-test('Awin preserves each variant price and RRP as one observation',async()=>{
-  const {ingestAwinProductFeed}=require('../lib/awin-feed.ts');
-  const original=globalThis.fetch, old=process.env.AWIN_DATAFEED_API_KEY;
-  process.env.AWIN_DATAFEED_API_KEY='test';
-  const list='Advertiser ID,Advertiser Name,Membership Status,Feed ID,Feed Name,Language,Vertical,Last Imported,URL\n13759,engelhorn,Joined,1,engelhorn,German,Sport,2026-09-26,https://feed.example/data.csv\n';
-  const csv='brand_name,product_name,merchant_category,gender,in_stock,search_price,rrp_price,delivery_cost,currency,size,size_stock_status,merchant_deep_link,parent_product_id,colour\n'
-    +'Mammut,Runbold Pants Men,Men Pants,male,1,60,100,0,EUR,W33 L32,W33 L32:in_stock,https://merchant.example/p,model-1,black\n'
-    +'Mammut,Runbold Pants Men,Men Pants,male,1,70,140,0,EUR,W34 L32,W34 L32:in_stock,https://merchant.example/p,model-1,black\n';
-  globalThis.fetch=async url=>new Response(String(url).includes('/list/')?list:csv,{status:200});
-  try{
-    const result=await ingestAwinProductFeed({id:'engelhorn',name:'engelhorn',country:'DE'});
-    assert.equal(result.offers.length,2);
-    assert.deepEqual(result.offers.map(o=>[o.price,o.rrp]),[[60,100],[70,140]]);
-    assert.ok(result.offers.every(o=>o.rrpSource==='awin:rrp_price'&&o.sizeAvailability==='available'));
-  }finally{globalThis.fetch=original;if(old===undefined)delete process.env.AWIN_DATAFEED_API_KEY;else process.env.AWIN_DATAFEED_API_KEY=old}
-});
-
 test('unverified size and unknown shipping cannot become a confirmed deal',async()=>{
   const base={sourceId:'mammut-eu',merchant:'Mammut EU',merchantCountry:'DE',url:'https://www.mammut.com/p',
     brand:'Mammut',name:'Runbold Pants Men',currency:'EUR',price:50,rrp:120,rrpSource:'feed:rrp',sizes:['W33 L32']};
