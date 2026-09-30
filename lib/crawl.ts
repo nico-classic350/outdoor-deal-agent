@@ -9,6 +9,7 @@ import { llmExtractFromHtml } from './llm-extract';
 import { productEligible } from './product-rules.mjs';
 import { rankDiscoveryUrls } from './discovery.mjs';
 import robotsParser from 'robots-parser';
+import { browserStartUrls } from '../config/browser-cohort';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
@@ -248,7 +249,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
             technicalPath.push('browser-fallback-disabled');
             return {offers,coverage:coverage('blocked',`HTTP ${r.status}; Browserless token not configured`)};
           }
-          const succeeded=await browserFallback([url],true);
+          const succeeded=await browserFallback([...browserStartUrls(source.id),url],true);
           return {offers,coverage:coverage(succeeded?'browser':'blocked',succeeded?'Browserless unblock/Playwright fallback succeeded':`HTTP ${r.status}; Browserless fallback returned no parseable product data`)};
         }
         if(!r.ok) continue;
@@ -285,7 +286,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         if (!earlyBrowserTried && !offers.some(o=>productEligible(o.name,o.description)) && browserFallbackConfigured() && parseEmptyHttp200 >= EARLY_BROWSER_EMPTY_HTTP_THRESHOLD && enoughBudgetForBrowser) {
           earlyBrowserTried = true;
           technicalPath.push('browser-early-escalation');
-          const succeeded = await browserFallback([url], false);
+          const succeeded = await browserFallback([...browserStartUrls(source.id), url], false);
           if (succeeded) {
             return { offers, coverage: coverage('browser', 'Early Browserless rendered-page/Playwright fallback succeeded after parse-empty HTTP pages') };
           }
@@ -310,7 +311,7 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
         technicalPath.push('browser-already-attempted');
         return {offers,coverage:coverage(offers.length?'partial':'failed','Browser fallback already attempted for this shop')};
       }
-      const candidates=discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl];
+      const candidates=[...browserStartUrls(source.id),...(discovered.length && safeShopUrl(source,discovered[0]) ? discovered : [source.baseUrl])];
       const succeeded=await browserFallback(candidates,false);
       return {offers,coverage:coverage(succeeded?'browser':offers.length?'partial':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':offers.length?'Products parsed, but no verified reference price':'No parseable data after Browserless fallback')};
     }

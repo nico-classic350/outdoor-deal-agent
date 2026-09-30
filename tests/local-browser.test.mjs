@@ -73,3 +73,46 @@ test('local Chromium renders JavaScript product cards', { skip: !existsSync(chro
     process.env = saved;
   }
 });
+
+test('local Chromium reads listing-item and Shopware cards with euro prefix prices', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><body><main>
+    <div itemprop="itemListElement" itemscope itemtype="http://schema.org/ListItem" id="product-card-1">
+      <a href="/eu/mens-incline-pants"><img src="/a.jpg"><h3>Rab Incline AS Pants Men</h3></a>
+      <span class="old">€130.00</span> <span class="price">€77.95</span></div>
+    <div class="product--box box--minimal"><a class="product--title" href="/wanderhose-xxl">Maier Sports Nil Hose Herren</a>
+      <span class="price--default">59,95 €</span> <span class="price--pseudo">UVP 99,95 €</span></div>
+    <div itemscope itemtype="http://schema.org/ListItem"><a href="/eu/sale">Sale</a></div>
+    <div class="product--box"><a href="/us-only">Trekking Pants</a><span>$ 49.99</span></div>
+  </main></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/eu/mens/pants`;
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { browserExtract } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const source = { id: 'rab-eu', name: 'Rab', country: 'NL', baseUrl: url, priority: 1 };
+    const result = await browserExtract(source, url, { deadline: Date.now() + 30000 });
+    const byName = Object.fromEntries(result.offers.map(o => [o.name, o]));
+    assert.equal(byName['Rab Incline AS Pants Men']?.price, 77.95);
+    assert.equal(byName['Maier Sports Nil Hose Herren']?.price, 59.95);
+    assert.ok(!result.offers.some(o => o.url.endsWith('/us-only')), 'non-euro prices are ignored');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});
+
+test('browser start URLs are same-shop listing pages', async () => {
+  const { BROWSER_START_URLS } = require('../config/browser-cohort.ts');
+  const { SHOPS } = require('../config/shops.ts');
+  for (const [id, urls] of Object.entries(BROWSER_START_URLS)) {
+    const shop = SHOPS.find(s => s.id === id);
+    assert.ok(shop, `${id} exists`);
+    for (const u of urls) assert.equal(new URL(u).hostname, new URL(shop.baseUrl).hostname, `${u} stays on ${id}`);
+  }
+});

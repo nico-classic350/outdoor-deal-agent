@@ -28,3 +28,19 @@ export function browserCohort(selection = 'all'): string[] {
   if (selection === 'all' || !selection) return [...BROWSER_COHORT.render, ...BROWSER_COHORT.blocked];
   return selection.split(',').map(id => id.trim()).filter(Boolean);
 }
+
+// Listing pages Chromium opens first. Many brand shops expose no usable
+// sitemap, so without these the crawler rendered only the start page (no
+// product list). EU/German locales are spelled out because the GitHub runner
+// sits in the US and bare domains geo-redirect to US/UK stores. Verified with
+// the diagnose mode of browser-crawl.yml on 30 September 2026.
+export const BROWSER_START_URLS: Record<string, string[]> = {
+  'odlo-eu': ['https://www.odlo.com/de-de/c/herren/kleidung/hosen-tights', 'https://www.odlo.com/de-de/c/outlet/men/pants-tights'],
+  'rab-eu': ['https://rab.equipment/eu/mens/pants'],
+  'norrona-eu': ['https://www.norrona.com/de-DE/o/herren/hosen/', 'https://www.norrona.com/de-DE/produkte/herren/hosen/'],
+  'outdoor-renner': ['https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/', 'https://www.outdoor-renner.de/outdoorhosen-herren-uebergroessen/'],
+};
+
+export function browserStartUrls(shopId: string): string[] {
+  return BROWSER_START_URLS[shopId] ? [...BROWSER_START_URLS[shopId]] : [];
+}

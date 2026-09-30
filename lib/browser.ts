@@ -54,6 +54,10 @@ const PRODUCT_SELECTOR = [
   '[data-testid*="product"]',
   '[data-product-id]',
   '[data-product-sku]',
+  // Schema.org listing items (e.g. Rab/Hyvä) and Shopware 5 product boxes.
+  '[itemtype*="ListItem"]',
+  '[id^="product-card"]',
+  '[class*="product--box"]',
 ].join(',');
 
 export function browserFallbackConfigured() {
@@ -85,10 +89,15 @@ function numberFromText(value: string): number | undefined {
 }
 
 function euroPrices(value: string): number[] {
-  const result = [...String(value || '').matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)]
-    .map(match => numberFromText(match[1]))
+  // "119,95 €" (German) or "€119.95" (English) notation. A page uses one of
+  // them; mixing both patterns would pair a symbol with the wrong number.
+  // Other currencies are ignored.
+  const text = String(value || '');
+  const after = [...text.matchAll(/(\d{1,4}(?:[.,]\d{2})?)\s*(?:€|EUR)/gi)].map(match => match[1]);
+  const matches = after.length ? after : [...text.matchAll(/(?:€|EUR)\s*(\d{1,4}(?:[.,]\d{2})?)/gi)].map(match => match[1]);
+  return matches
+    .map(value => numberFromText(value))
     .filter((x): x is number => Boolean(x));
-  return result;
 }
 
 function timeLeft(deadline: number, cap: number): number {
