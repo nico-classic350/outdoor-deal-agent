@@ -12,7 +12,7 @@
 
 | Schritt | Code/Ort | Ergebnis |
 | --- | --- | --- |
-| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 94 EU-Quellen, Premium-Markenliste und Auswahlprofil |
+| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 92 EU-Quellen, Premium-Markenliste und Auswahlprofil |
 | Erfassung | `lib/crawl.ts`, `lib/targeted.ts`, `lib/feed.ts`, `lib/globetrotter-feed.ts` | Direkte Listings, offizielle zugängliche Feeds, Sitemaps, HTML/JSON-LD |
 | Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 22:20 UTC Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
 | Browser-Fallback (optional) | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless nur noch opt-in (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0) |
@@ -69,7 +69,7 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 
 **Erledigt (30. September):** Browserless ist abgeschaltet; `BROWSERLESS_API_TOKEN` wurde in Vercel Production gelöscht und neu deployt. Das Rendering läuft nächtlich in GitHub Actions (Chromium). Der Browserless-Code bleibt als optionaler Pfad bestehen (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0); `/api/browser-check` meldet ohne Token nur „nicht konfiguriert“.
 
-**Markenliste (30. September):** Nur Premium-Marken mit nachweislich hochwertigen Materialien. Entfernt: Stoic (Bergfreunde-Eigenmarke, gemischte Bewertungen zur Materialhaltbarkeit), Adidas Terrex (Massenmarkt), Black Diamond (Schwerpunkt Hartware). Neu: Fjällräven, Klättermusen, Bergans, Lundhags, Mountain Equipment, Montura. Der Black-Diamond- und der Adidas-Terrex-Shop wurden im Register durch Fjällräven und Lundhags ersetzt; Bergans, Klättermusen und Montura kamen hinzu (94 Shops, weiterhin 16 Batches).
+**Markenliste (30. September):** Nur Premium-Marken mit nachweislich hochwertigen Materialien. Entfernt: Stoic (Bergfreunde-Eigenmarke, gemischte Bewertungen zur Materialhaltbarkeit), Adidas Terrex (Massenmarkt), Black Diamond (Schwerpunkt Hartware). Neu: Fjällräven, Klättermusen, Bergans, Lundhags, Mountain Equipment, Montura. Der Black-Diamond- und der Adidas-Terrex-Shop wurden im Register durch Fjällräven und Lundhags ersetzt; Bergans und Klättermusen kamen hinzu. Trekkinn (Dollarpreise für den US-Runner) und der geschlossene Montura-Shop wurden entfernt; die Marke Montura bleibt für Händlerangebote (92 Shops, weiterhin 16 Batches).
 
 ## Übernahme und Prüfung
 

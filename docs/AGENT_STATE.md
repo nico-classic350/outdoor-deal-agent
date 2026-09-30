@@ -15,7 +15,7 @@ This file is the compact source-of-truth handoff for AI development sessions (Cl
 
 ## Daily pipeline
 
-- 94 registered shops (brand review 30 September 2026: Black Diamond and Adidas Terrex stores replaced by Fjällräven and Lundhags; Bergans, Klättermusen, Montura added)
+- 92 registered shops (brand review 30 September 2026: Black Diamond and Adidas Terrex stores replaced by Fjällräven and Lundhags; Bergans and Klättermusen added; Trekkinn (USD for the US runner) and the closed Montura store removed)
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
 - 16 recovery crons in the 05:00 UTC hour rerun missing batches; retry finalizer in the 06:00 UTC hour and watchdog in the 07:00 UTC hour publish `agent_runs` only after all batches are present

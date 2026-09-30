@@ -6,14 +6,13 @@
 export const BROWSER_COHORT = {
   render: [
     'sportfits', 'outdoor-renner', 'camp4', 'trekking-koenig', 'sport65', 'breuninger', 'sportspar',
-    'blue-tomato', 'hardloop', 'alpinstore', 'trekkinn', 'snowinn', 'barrabes', 'varuste', 'hanibal',
+    'blue-tomato', 'hardloop', 'alpinstore', 'snowinn', 'barrabes', 'varuste', 'hanibal',
     'rockpoint', 'privatesportshop', 'snowcountry', 'asadventure', 'vrijbuiter', 'zalando-de',
     'aboutyou-de', 'bestsecret', 'odlo-eu', 'patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
     'peakperformance-eu', 'goldwin-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
     // Premium brand stores added with the September 2026 brand review.
-    // (fjallraven-eu is Cloudflare-protected, montura-eu shows a closed-store
-    // password page; both were surveyed on 30 September 2026.)
+    // (fjallraven-eu is Cloudflare-protected; surveyed on 30 September 2026.)
     'lundhags-eu', 'bergans-eu', 'klattermusen-eu',
   ],
   blocked: [
@@ -22,7 +21,7 @@ export const BROWSER_COHORT = {
     'ortovox-eu', 'lasportiva-eu', 'fjallraven-eu',
   ],
   // Small fixed cohort for A/B measurements (direct-only vs. direct + Chromium).
-  pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'peakperformance-eu', 'trekkinn', 'outdoor-renner'],
+  pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'lundhags-eu', 'klattermusen-eu', 'outdoor-renner'],
 } as const;
 
 export function browserCohort(selection = 'all'): string[] {

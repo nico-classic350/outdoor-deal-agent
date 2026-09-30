@@ -135,7 +135,6 @@ const CANDIDATES = {
   'haglofs-eu': ['https://www.haglofs.com/de-de', 'https://www.haglofs.com/de', 'https://www.haglofs.com/en-eu', 'https://www.haglofs.com/eu'],
   'odlo-eu': ['https://www.odlo.com/de-de/c/outlet/herren/hosen-tights', 'https://www.odlo.com/de-de/c/outlet'],
   'outdoor-renner': ['https://www.outdoor-renner.de/', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
-  'trekkinn': ['https://www.tradeinn.com/trekkinn/de', 'https://www.tradeinn.com/trekkinn/de/herren-hosen/10573/s'],
   'peakperformance-eu': [],
 };
 
