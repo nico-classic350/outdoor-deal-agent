@@ -55,11 +55,11 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 
 ## Tagesstatus vom 30. September 2026
 
-- Letzter zum Zeitpunkt der Übergabe geprüfter Produktions-Commit: `37fa1ebdc83d80309280feda24494dde47fd4fa1` (vor dieser Bereinigung).
+- Geprüfter Produktions-Commit nach der Bereinigung: `5497c0874f0840770a9871d4a8e2b8cd6cff02f2` (PR #47). `/api/health` antwortete HTTP 200 mit genau diesem SHA; die entfernte `/api/awin-health`-Route antwortete 404 und `/api/probe` funktionierte.
 - 16/16 Batches; letzter finalisierter Bericht um 04:52 UTC; App-Status `pipelineStatus=complete`, `emailDeliveryStatus=sent`.
 - 1.671 Rohangebote, 138 normalisierte Angebote, fünf veröffentlichte Deals aus 91 Shops.
 - Browserless: 73 Shops versuchten den Fallback, **0** wurden darüber wiedergewonnen, 72 meldeten `browser-provider-auth-rejected`. Reale `/content`- und `/unblock`-Anfragen erhielten HTTP 401. `browserFallbackConfigured=true` hieß bislang lediglich, dass ein Tokenwert vorhanden war. Der neue Health-Status macht die Auth-Ablehnung sichtbar.
-- Vercel Runtime Logs konnten wegen `ExceedsBillingLimitError` nur eingeschränkt eingesehen werden; die obigen Browserless-Zahlen stammen aus den gespeicherten Batch-Coverage-Daten von `/api/batch-status`.
+- Vercel Runtime Logs konnten wegen `ExceedsBillingLimitError` nur eingeschränkt eingesehen werden; die obigen Browserless-Zahlen stammen aus den gespeicherten Batch-Coverage-Daten von `/api/batch-status`. Nach dem Deployment meldete `/api/health` ausdrücklich `browserProviderStatus=auth-rejected`, 72 betroffene Shops und null wiedergewonnene Shops.
 
 **Offener Betriebsfehler:** In Browserless einen gültigen API-Token und den Accountstatus prüfen, `BROWSERLESS_API_TOKEN` in Vercel Production kontrollieren, neue Production-Deployment-Version auslösen. Dann einen kleinen schreibfreien `pnpm smoke:browser`-Test mit lokal bereitgestelltem Token oder den nächsten begrenzten Produktionsbatch auswerten. Erfolg ist an tatsächlichem HTTP 200/Browser-Extraktion erkennbar, nicht am Konfigurationsflag. Bis dahin erzeugt der direkte Crawl weiterhin den täglichen Bericht und die E-Mail.
 
