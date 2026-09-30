@@ -156,7 +156,8 @@ const compactPage = p => ({ requested: p.requested, finalUrl: p.finalUrl, httpSt
   localeLinks: (p.localeLinks || []).slice(0, 6).map(l => l.href), firstCardPrices: p.cardSamples?.[0]?.priceNodes?.slice(0, 5) ?? [],
   platform: p.platform ?? null, firstCard: p.cardSamples?.[0] ? { tag: p.cardSamples[0].tag, cls: p.cardSamples[0].cls, html: p.cardSamples[0].html } : null });
 const menTrousers = href => TROUSERS.test(href) && MEN.test(href) && !WOMEN.test(href);
-for (const id of browserCohort(selection)) {
+const diagnoseIds = selection === 'registry' ? SHOPS.map(shop => shop.id) : browserCohort(selection);
+for (const id of diagnoseIds) {
   const source = SHOPS.find(shop => shop.id === id);
   if (!source) { console.log(`[diagnose] unknown shop ${id}`); continue; }
   const pages = [];
@@ -182,7 +183,23 @@ for (const id of browserCohort(selection)) {
         sample: j?.products?.[0] ? { title: j.products[0].title, variants: j.products[0].variants?.slice(0, 3).map(v => ({ title: v.title, price: v.price, compare_at_price: v.compare_at_price, available: v.available })) } : null };
     } catch (e) { shopifyProbe = { error: String(e?.message || e).slice(0, 80) }; }
   }
-  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe };
+  // Public commerce APIs that serve structured prices without a browser.
+  const origin = new URL(pages[0].finalUrl || source.baseUrl).origin;
+  const ua = { 'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)', accept: 'application/json' };
+  const probe = async (label, url, init = {}) => {
+    try {
+      const r = await fetch(url, { ...init, headers: { ...ua, ...(init.headers || {}) }, signal: AbortSignal.timeout(10000) });
+      const body = (await r.text()).slice(0, 400);
+      return { label, status: r.status, json: /^\s*[\[{]/.test(body), sample: body.slice(0, 200) };
+    } catch (e) { return { label, error: String(e?.message || e).slice(0, 80) }; }
+  };
+  const apiProbes = [
+    await probe('woocommerce', `${origin}/wp-json/wc/store/v1/products?per_page=1&on_sale=true`),
+    await probe('magento-graphql', `${origin}/graphql`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{ products(search: "hose", pageSize: 1) { total_count items { name price_range { minimum_price { regular_price { value currency } final_price { value currency } } } } } }' }) }),
+    await probe('shopify', `${origin}/products.json?limit=1`),
+  ].filter(p => p.status === 200 && p.json);
+  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe, apiProbes };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
 }
