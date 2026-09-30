@@ -102,6 +102,17 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
   });
+  // Nightly Actions browser only: when relevant products were parsed but none of
+  // them carries price evidence (other listings may), render the configured
+  // sale/outlet pages, which show the struck-through reference prices.
+  const renderStartPagesForEvidence = async () => {
+    const relevant=offers.filter(o=>productEligible(o.name,o.description));
+    if(!relevant.length || relevant.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))) return;
+    const startUrls=browserStartUrls(source.id);
+    if(browserFallbackMode()!=='local-playwright' || !startUrls.length || browserAttempted) return;
+    technicalPath.push('browser-start-pages-for-evidence');
+    await browserFallback(startUrls,false);
+  };
   const browserFallback = async (urls:string[], blocked=false) => {
     if(browserAttempted){technicalPath.push('browser-already-attempted');return false;}
     browserAttempted=true;
@@ -252,6 +263,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         offers.splice(0,offers.length,...offers.filter(o=>!detailedUrls.has(o.url.toLowerCase())),...detailOffers);
       }
       if(offers.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))){
+        await renderStartPagesForEvidence();
         return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
       }
       technicalPath.push('targeted-listings-empty','generic-fallback');
@@ -264,6 +276,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
       offers.push(...feedOffers);
       technicalPath.push('feed-success');
       discovered=[source.feedUrl || source.baseUrl];
+      await renderStartPagesForEvidence();
       return {offers,coverage:coverage('success','Structured feed')};
     }
 
@@ -368,6 +381,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
       const succeeded=await browserFallback(candidates,false);
       return {offers,coverage:coverage(succeeded?'browser':offers.length?'partial':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':offers.length?'Products parsed, but no verified reference price':'No parseable data after Browserless fallback')};
     }
+    await renderStartPagesForEvidence();
     const status = discovered.length>1?'success':'partial';
     return {offers,coverage:coverage(status,'Direct crawl produced parseable product data')};
   } catch(e:any){
