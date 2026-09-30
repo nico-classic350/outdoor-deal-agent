@@ -91,7 +91,8 @@ carl-denig|Carl Denig|NL|https://www.carldenig.nl|2
 glisshop|Glisshop|FR|https://www.glisshop.com|2
 outnorth|Outnorth|SE|https://www.outnorth.com|2
 bergans-eu|Bergans EU|NO|https://www.bergans.com|1
-klattermusen-eu|Klättermusen EU|SE|https://www.klattermusen.com|1`;
+klattermusen-eu|Klättermusen EU|SE|https://www.klattermusen.com|1
+mydealz|mydealz Community-Deals|DE|https://www.mydealz.de|1`;
 
 export const SHOPS: ShopSource[] = DATA.split('\n').map((line) => {
   const [id, name, country, baseUrl, priority] = line.split('|');

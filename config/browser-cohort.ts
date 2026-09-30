@@ -20,6 +20,9 @@ export const BROWSER_COHORT = {
     // Direct pages list products without reference prices; their sale/outlet
     // pages show struck-through prices (registry diagnosis, 30 September 2026).
     'engelhorn', 'sportokay', 'sport-conrad', 'gigasport',
+    // RSS feeds, no browser: the nightly run stores a snapshot in case Vercel's
+    // address is refused by mydealz.
+    'mydealz',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',

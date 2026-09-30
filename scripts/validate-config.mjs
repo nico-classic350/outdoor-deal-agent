@@ -90,7 +90,7 @@ const malformedShopLines=shopLines.filter(line=>{
   const parts=line.split('|');
   return parts.length!==5 || !/^[A-Z]{2}$/.test(parts[2]) || !/^https?:\/\//.test(parts[3]) || !/^[123]$/.test(parts[4]);
 });
-assert(shopLines.length===92,`shop registry contains expected 92 sources (found ${shopLines.length})`);
+assert(shopLines.length===93,`shop registry contains expected 93 sources (found ${shopLines.length})`);
 assert(malformedShopLines.length===0,`shop registry rows are structurally valid (invalid ${malformedShopLines.length})`);
 const duplicateIds=shopLines.map(line=>line.split('|')[0]).filter((id,index,all)=>all.indexOf(id)!==index);
 assert(duplicateIds.length===0,'shop registry IDs are unique');

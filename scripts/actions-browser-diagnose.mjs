@@ -199,11 +199,49 @@ for (const id of diagnoseIds) {
       body: JSON.stringify({ query: '{ products(search: "hose", pageSize: 1) { total_count items { name price_range { minimum_price { regular_price { value currency } final_price { value currency } } } } } }' }) }),
     await probe('shopify', `${origin}/products.json?limit=1`),
   ].filter(p => p.status === 200 && p.json);
-  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe, apiProbes };
+  // Files a shop publishes for search engines and feed consumers. Bot protection
+  // often exempts them; they show whether product data is reachable openly.
+  const publicFiles = [];
+  const readText = async url => {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': ua['user-agent'] }, signal: AbortSignal.timeout(10000) });
+      return { status: r.status, type: r.headers.get('content-type') || '', text: r.ok ? (await r.text()).slice(0, 400000) : '' };
+    } catch (e) { return { status: null, error: String(e?.message || e).slice(0, 80), text: '' }; }
+  };
+  const robots = await readText(`${origin}/robots.txt`);
+  const sitemaps = [...robots.text.matchAll(/^\s*sitemap:\s*(\S+)/gim)].map(m => m[1]).slice(0, 6);
+  publicFiles.push({ label: 'robots', status: robots.status, sitemaps, feedHints: [...robots.text.matchAll(/(\S*(?:feed|export|google|merchant|idealo)\S*\.(?:xml|csv|txt))/gi)].map(m => m[1]).slice(0, 5) });
+  for (const url of (sitemaps.length ? sitemaps : [`${origin}/sitemap.xml`]).slice(0, 2)) {
+    const s = await readText(url);
+    const locs = [...s.text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1]);
+    publicFiles.push({ label: 'sitemap', url, status: s.status, type: (s.type || '').slice(0, 40), error: s.error, locs: locs.length,
+      sample: locs.filter(l => TROUSERS.test(l)).slice(0, 3).concat(locs.slice(0, 2)).slice(0, 4),
+      priceTags: /<(?:g:price|price|sale_price)>/i.test(s.text) });
+  }
+  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe, apiProbes, publicFiles };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
 }
 await closeLocalBrowser();
+
+// Deal-community feeds (read-only): shows whether the runner may read them and
+// how their items look. Public feeds only; a personal alert feed is read from
+// the environment when set and its URL is never printed.
+if (process.env.ACTIONS_DIAGNOSE_FEEDS === 'true') {
+  const feeds = [['mydealz-hot', 'https://www.mydealz.de/rss/hot'], ['mydealz-fashion', 'https://www.mydealz.de/rss/gruppe/fashion-accessories'],
+    ['mydealz-outdoor', 'https://www.mydealz.de/rss/gruppe/outdoor']];
+  if (process.env.MYDEALZ_ALERT_FEED_URL) feeds.push(['mydealz-alerts', process.env.MYDEALZ_ALERT_FEED_URL]);
+  for (const [label, url] of feeds) {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)', accept: 'application/rss+xml, application/xml' }, signal: AbortSignal.timeout(15000) });
+      const text = await r.text();
+      const items = text.match(/<item[\s>][\s\S]*?<\/item>/g) || [];
+      console.log(`[feed] ${JSON.stringify({ label, status: r.status, type: r.headers.get('content-type'), items: items.length,
+        head: items.length ? undefined : text.slice(0, 300), first: label === 'mydealz-alerts' ? undefined : items.slice(0, 2).map(i => i.slice(0, 2500)),
+        titles: items.slice(0, 8).map(i => (i.match(/<title>([\s\S]*?)<\/title>/) || [])[1]?.slice(0, 120)) })}`);
+    } catch (e) { console.log(`[feed] ${JSON.stringify({ label, error: String(e?.message || e).slice(0, 80) })}`); }
+  }
+}
 
 mkdirSync('observability', { recursive: true });
 writeFileSync('observability/actions-browser-diagnose.json', JSON.stringify(report, null, 2) + '\n');

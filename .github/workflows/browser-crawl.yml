@@ -66,6 +66,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.diagnose
         env:
           ACTIONS_BROWSER_SHOPS: ${{ inputs.shops }}
+          ACTIONS_DIAGNOSE_FEEDS: 'true'
+          MYDEALZ_ALERT_FEED_URL: ${{ secrets.MYDEALZ_ALERT_FEED_URL }}
         run: node scripts/actions-browser-diagnose.mjs
       - name: Crawl browser cohort with local Chromium
         if: github.event_name == 'schedule' || !inputs.diagnose
@@ -74,6 +76,7 @@ jobs:
           AB_COMPARE: ${{ github.event_name == 'schedule' && 'false' || inputs.compare }}
           WRITE_SNAPSHOT: ${{ github.event_name == 'schedule' && 'true' || inputs.write_snapshot }}
           BROWSER_SNAPSHOT_DATABASE_URL: ${{ secrets.BROWSER_SNAPSHOT_DATABASE_URL }}
+          MYDEALZ_ALERT_FEED_URL: ${{ secrets.MYDEALZ_ALERT_FEED_URL }}
         run: node scripts/actions-browser-crawl.mjs
       - uses: actions/upload-artifact@v4
         if: always()

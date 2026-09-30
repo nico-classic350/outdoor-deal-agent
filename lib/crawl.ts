@@ -2,6 +2,7 @@ import { ShopSource, RawOffer, SourceCoverage } from './types';
 import { extractJsonLd, extractHtmlFallback } from './extract';
 import { PROFILE } from '../config/profile';
 import { ingestFeed } from './feed';
+import { ingestMydealz } from './mydealz';
 import { browserExtract, browserFallbackConfigured, browserFallbackMode } from './browser';
 import { targetedListingUrls, extractTargetedListing, nextListingPage } from './targeted';
 import { ingestGlobetrotterOfficialFeed } from './globetrotter-feed';
@@ -150,6 +151,15 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
   };
 
   try{
+    if(source.id==='mydealz'){
+      technicalPath.push('mydealz-rss');
+      const result=await ingestMydealz(source,deadline);
+      httpStatuses.push(...result.statuses);
+      discovered=[`mydealz RSS (${result.feeds} feeds)`];
+      offers.push(...result.offers);
+      return {offers,coverage:coverage(result.feeds?'success':'failed',result.feeds?'mydealz RSS feeds (community deals with merchant price)':'mydealz RSS feeds not reachable')};
+    }
+
     const shopify=SHOPIFY_SOURCES[source.id];
     if(shopify){
       technicalPath.push('shopify-json');
