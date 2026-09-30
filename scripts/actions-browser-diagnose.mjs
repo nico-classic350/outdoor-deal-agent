@@ -199,7 +199,26 @@ for (const id of diagnoseIds) {
       body: JSON.stringify({ query: '{ products(search: "hose", pageSize: 1) { total_count items { name price_range { minimum_price { regular_price { value currency } final_price { value currency } } } } } }' }) }),
     await probe('shopify', `${origin}/products.json?limit=1`),
   ].filter(p => p.status === 200 && p.json);
-  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe, apiProbes };
+  // Files a shop publishes for search engines and feed consumers. Bot protection
+  // often exempts them; they show whether product data is reachable openly.
+  const publicFiles = [];
+  const readText = async url => {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': ua['user-agent'] }, signal: AbortSignal.timeout(10000) });
+      return { status: r.status, type: r.headers.get('content-type') || '', text: r.ok ? (await r.text()).slice(0, 400000) : '' };
+    } catch (e) { return { status: null, error: String(e?.message || e).slice(0, 80), text: '' }; }
+  };
+  const robots = await readText(`${origin}/robots.txt`);
+  const sitemaps = [...robots.text.matchAll(/^\s*sitemap:\s*(\S+)/gim)].map(m => m[1]).slice(0, 6);
+  publicFiles.push({ label: 'robots', status: robots.status, sitemaps, feedHints: [...robots.text.matchAll(/(\S*(?:feed|export|google|merchant|idealo)\S*\.(?:xml|csv|txt))/gi)].map(m => m[1]).slice(0, 5) });
+  for (const url of (sitemaps.length ? sitemaps : [`${origin}/sitemap.xml`]).slice(0, 2)) {
+    const s = await readText(url);
+    const locs = [...s.text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1]);
+    publicFiles.push({ label: 'sitemap', url, status: s.status, type: s.type.slice(0, 40), locs: locs.length,
+      sample: locs.filter(l => TROUSERS.test(l)).slice(0, 3).concat(locs.slice(0, 2)).slice(0, 4),
+      priceTags: /<(?:g:price|price|sale_price)>/i.test(s.text) });
+  }
+  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe, apiProbes, publicFiles };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
 }
