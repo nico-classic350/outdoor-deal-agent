@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productEligible, sizeEvidence, selectOffers, dealTier } from '../lib/product-rules.mjs';
+import { productEligible, sizeEvidence, normalizeSizeLabel, selectOffers, dealTier } from '../lib/product-rules.mjs';
 
 test('rejects explicit product mismatches while allowing eligible outdoor trousers', () => {
   assert.equal(productEligible('Odlo Zeroweight Pro Windproof Warm Tights Langlaufhose'), false);
@@ -136,4 +136,29 @@ test('health and coverage use the same publication re-screening', async () => {
   const safe=screenForPublication(candidates,40);
   assert.equal(safe.deals.length,1);
   assert.equal(safe.qualifiedCount,safe.deals.length);
+});
+
+test('size labels from different systems are normalised onto L / W33-34 L<=32', () => {
+  const cases = {
+    target: ['L', 'l', 'Large', 'L Regular', 'L-Short', 'L/R', 'L kurz', 'Gr. L', 'Size: L', 'L (52)', 'L / EU 52',
+      'W34 L32', 'W34/L32', 'W 34 L 32', '34/32', '34x32', '34 X 30', '34-32', '33/32', '34R', '34 Regular', '34S', '34 short', '34/32"'],
+    near: ['M/L', 'L/XL', 'W34', 'W33', 'UK 34', '34', '33', 'EU 50', 'DE 52', '50', '52', '25 K', 'Kurzgröße 26', '26 kurz', 'FR 44', 'IT 50'],
+    incompatible: ['S', 'M', 'XL', 'XXL', '3XL', 'M Regular', 'XL Short', 'L Long', 'L-Lang', 'W32 L32', '34/34', '33/34', 'W36 L32',
+      '34L', '34 Long', '32R', 'W36', 'EU 46', 'DE 56', '98', '102', 'Langgröße 98', '24 K', 'FR 48', 'IT 56'],
+    unknown: ['One Size', 'Standard', '7', 'EU 42.5 shoe', ''],
+  };
+  for (const [expected, labels] of Object.entries(cases)) {
+    for (const label of labels) assert.equal(normalizeSizeLabel(label), expected, `${JSON.stringify(label)} -> ${expected}`);
+  }
+});
+
+test('size evidence across a whole size list', () => {
+  assert.equal(sizeEvidence(['M', 'L', 'XL']), 'confirmed');
+  assert.equal(sizeEvidence(['48', '50', '52', '54']), 'probable');
+  assert.equal(sizeEvidence(['M', 'XL']), 'no', 'L missing from the offered sizes');
+  assert.equal(sizeEvidence(['L Long', 'XL Long']), 'no');
+  assert.equal(sizeEvidence(['98', '102', '106']), 'no', 'Langgrößen only');
+  assert.equal(sizeEvidence(['24 K', '25 K', '27 K']), 'probable');
+  assert.equal(sizeEvidence(['One Size']), 'unconfirmed');
+  assert.equal(sizeEvidence(['S', 'One Size']), 'unconfirmed', 'unknown systems never reject');
 });
