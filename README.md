@@ -2,7 +2,7 @@
 
 Personal crawler and scoring service for the outdoor-deal search.
 
-For a compact cross-chat project handoff, read `docs/AGENT_STATE.md` first.
+For an operational handoff, read [`docs/HANDOVER.md`](docs/HANDOVER.md) and then `docs/AGENT_STATE.md`.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ The daily pipeline runs as 16 Vercel cron batches, scheduled at 00:00–03:00 UT
 
 Each finalized coverage report compares the current run with the immediately preceding published report. The dashboard, `/api/coverage`, and an enabled notification show changes in reached shops, shops with product data, raw products, normalized offers, confirmed sizes, deals and review candidates; per-shop rows show status and product-count changes. A same-day full rerun compares against the last published report of that day. The batch snapshot timestamp and baseline are saved inside the new report so subsequent finalizer retries cannot silently replace the baseline. `/api/probe` previews the same comparison without writing to Neon. A notification is keyed to the completed batch snapshot, so retries do not resend it but a new same-day crawl can send an updated report. A missing historical field is shown as unknown rather than zero.
 
-Source acquisition order is: official product feed/API where available, Awin product feed when configured and accessible, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, Browserless REST rendering/unblocking and finally remote Playwright for difficult rendered or interactive pages. No local Chromium or browser binaries are bundled; `playwright-core` is only the remote-control client.
+Source acquisition order is: accessible official merchant feeds/APIs, targeted retailer listing parsers, generic feed, sitemap/HTTP parsing, Browserless REST rendering/unblocking and finally remote Playwright for difficult rendered or interactive pages. Awin is not available to this publisher and has been removed from the runtime. No local Chromium or browser binaries are bundled; `playwright-core` is only the remote-control client.
 
 ## Deal quality gates
 
@@ -72,7 +72,7 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - Each source also stores a compact diagnostic code (for example parser empty, missing reference price or unverified size) for human review and future parser assistance; no model decides whether to publish a deal.
 - Sitemap links are restricted to the shop domain and HTML crawling respects robots.txt.
 - Mammut men's hiking-trouser category uses a targeted HTML parser. Its server-rendered product cards are extracted without requiring Browserless; a repeated screen-reader price is read once and does not become an MSRP.
-- `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials.
+- `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials. It also reports Browserless authentication failures observed in today's batches; a configured token alone does not prove it is accepted.
 - Read-only status endpoints use short CDN caching where appropriate.
 
 ## Browserless fallback
@@ -92,7 +92,7 @@ For the existing `playwright-core` CDP connection the WebSocket URL is `wss://pr
 
 ## Optional integrations
 
-Awin remains optional. Until `AWIN_DATAFEED_API_KEY` is configured, mapped merchants automatically use their existing targeted/direct ingestion paths. Browserless Cloud is the remote browser layer; the application bundles only `playwright-core`, never a local browser binary.
+Browserless Cloud is the remote browser layer; the application bundles only `playwright-core`, never a local browser binary. Merchant feeds are used only where the shop itself provides an accessible feed. Awin access was denied and is not part of this deployment.
 
 ## LLM extraction pilot
 

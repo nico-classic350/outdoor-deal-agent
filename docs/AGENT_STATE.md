@@ -18,7 +18,7 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - 91 registered shops
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
-- 16 recovery crons at 05:00 UTC rerun missing batches; retry finalizer at 07:00 UTC publishes `agent_runs` only after all batches are present
+- 16 recovery crons in the 05:00 UTC hour rerun missing batches; retry finalizer in the 06:00 UTC hour and watchdog in the 07:00 UTC hour publish `agent_runs` only after all batches are present
 - `/api/health` is the production health and deployment-SHA source
 - `/api/probe` replays current filtering/scoring against the latest complete stored batch snapshot without crawling shops
 - Finalized reports include a delta against the previous finalized report, including per-shop status, raw extraction and useful-offer counts. Same-day reruns preserve the earlier report as their baseline. `/api/probe` previews this comparison read-only; snapshot-keyed notifications can send a corrected same-day report without duplicate messages on finalizer retries.
@@ -37,18 +37,19 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 ## Acquisition order
 
 1. official feed/API where available
-2. Awin product feed when configured
-3. targeted retailer parsers
-4. generic feed/sitemap/direct HTTP + JSON-LD/HTML
-5. Browserless `/content` for JS-rendered pages
-6. Browserless `/unblock` for 403/429
-7. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
+2. targeted retailer parsers
+3. generic feed/sitemap/direct HTTP + JSON-LD/HTML
+4. Browserless `/content` for JS-rendered pages
+5. Browserless `/unblock` for 403/429
+6. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
+
+Awin advertiser access was declined. Its runtime adapter, health route, key and setup guide were removed. Historical coverage may still contain `awin-check`; these entries are immutable evidence of old runs.
 
 No local Chromium or full Playwright browser binaries are bundled.
 
 ## Results and notification
 
-- `/` displays confirmed deals, review candidates, source evidence and browser-local saved items.
+- `/` displays evidenced-discount deals, review candidates, source evidence and browser-local saved items.
 - A complete daily run requires a provider-accepted consolidated email with images and full coverage. Production needs `DEAL_NOTIFY_TO` and either `GMAIL_SMTP_USER` plus `GMAIL_SMTP_APP_PASSWORD` for Gmail, or `RESEND_API_KEY` plus `DEAL_NOTIFY_FROM` for a verified sending domain. Missing settings make health and finalizer unhealthy, and the recovery cron retries failed sends from the saved report. No recipient address is hardcoded.
 - Price history on the page uses finalized offer snapshots from up to 30 recent runs.
 
@@ -76,6 +77,10 @@ The pilot only runs after a rendered page was received and deterministic extract
 For a read-only five-shop Browserless smoke test, set the token in the local shell and run `pnpm smoke:browser`. The default shops are Hervis, Sport Bittl, Mammut EU, Odlo EU and Arc’teryx EU; pass shop IDs to select others. It prints coverage and offer counts and never writes to Neon. Browserless requests may consume account credits. HTTP and browser requests share the source deadline; coverage records each browser stage and its elapsed time.
 
 Health exposes only non-secret configuration state.
+
+As of 30 September 2026, the production batches recorded Browserless HTTP 401 and zero recovered products despite the token being configured. `/api/health` now exposes `browserProviderStatus` and counts of auth-rejected sources. The token must be corrected in Vercel Production and a new deployment created before a subsequent batch can establish recovery.
+
+Two legacy ChatGPT automations that independently sent the same daily report were paused on 30 September 2026. The app's Gmail SMTP notification and Vercel watchdog remain the sole active report pipeline. See `docs/HANDOVER.md` for status, operations, and the current open issue.
 
 ## Change workflow
 

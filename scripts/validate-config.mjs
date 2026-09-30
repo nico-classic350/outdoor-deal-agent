@@ -20,7 +20,7 @@ const agentState=read('docs/AGENT_STATE.md');
 
 const requiredDirect=[
   'config/profile.ts','config/shops.ts','lib/types.ts','lib/crawl.ts','lib/extract.ts','lib/feed.ts','lib/fx.ts',
-  'lib/targeted.ts','lib/globetrotter-feed.ts','lib/awin-feed.ts','lib/browser.ts','lib/browser-config.mjs','lib/store.ts',
+  'lib/targeted.ts','lib/globetrotter-feed.ts','lib/browser.ts','lib/browser-config.mjs','lib/store.ts',
   'lib/normalize.ts','lib/size.ts','lib/fit.ts','lib/score.ts','lib/batch-run.ts','docs/AGENT_STATE.md'
 ];
 for(const p of requiredDirect) assert(existsSync(full(p)),`direct source exists: ${p}`);
@@ -111,6 +111,7 @@ const sourceBudget=crawl.match(/SOURCE_BUDGET_MS[\s\S]{0,180}?\|\|\s*(\d+)/)?.[1
 assert(Boolean(sourceBudget),'source runtime budget is configured');
 if(sourceBudget) assert(Number(sourceBudget)<=60000,'default source runtime budget is at most 60 seconds');
 assert(read('lib/crawl.ts').includes('allowedByRobots'),'crawler respects shop robots rules');
+assert(!read('lib/crawl.ts').includes('awin-'),'unavailable Awin feed is absent from the runtime crawl');
 assert(read('lib/product-rules.mjs').includes('qualifiedCount'),'all qualifying deals are classified before display limit');
 
 if(errors.length){ console.error('[validate-config] FAILED'); for(const e of errors) console.error(` - ${e}`); process.exit(1); }
