@@ -229,3 +229,26 @@ test('shop card rules read cards the generic selectors miss', { skip: !existsSyn
     process.env = saved;
   }
 });
+
+test('size check reads Shopware configurator and Magento swatches, skipping unavailable ones', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+    <div class="product-detail-configurator-group"><input type="radio" id="a" disabled><label class="product-detail-configurator-option-label" for="a">M</label>
+      <input type="radio" id="b"><label class="product-detail-configurator-option-label" for="b">L</label></div>
+    <div class="swatch-attribute"><div class="swatch-option text disabled">XL</div><div class="swatch-option text">W34/L32</div></div></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { verifyProductSizes } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const sizes = await verifyProductSizes(`http://127.0.0.1:${server.address().port}/p/x`);
+    assert.deepEqual(sizes, ['L', 'W34/L32']);
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});

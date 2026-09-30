@@ -13,6 +13,8 @@ import { browserStartUrls } from '../config/browser-cohort';
 import { SHOP_BRAND } from '../config/shops';
 import { SHOPIFY_SOURCES } from '../config/shopify-sources';
 import { ingestShopify } from './shopify';
+import { COMMERCE_SOURCES } from '../config/commerce-sources';
+import { ingestCommerceApi } from './commerce-apis';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
@@ -151,6 +153,22 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         }
         technicalPath.push('shopify-json-empty');
       }catch{ technicalPath.push('shopify-json-error'); }
+    }
+
+    const commerce=COMMERCE_SOURCES[source.id];
+    if(commerce){
+      technicalPath.push(`${commerce.type}-api`);
+      try{
+        const result=await ingestCommerceApi(source,commerce,deadline);
+        httpStatuses.push(...result.statuses);
+        discovered=[`${commerce.origin} (${commerce.type} API)`];
+        if(result.offers.length){
+          offers.push(...result.offers);
+          technicalPath.push(`${commerce.type}-api-success`);
+          return {offers,coverage:coverage('success',`${commerce.type} storefront API (sale and regular price)`)};
+        }
+        technicalPath.push(`${commerce.type}-api-empty`);
+      }catch{ technicalPath.push(`${commerce.type}-api-error`); }
     }
 
     if(source.id==='globetrotter'){
