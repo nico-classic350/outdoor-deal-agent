@@ -15,9 +15,9 @@ function offerRow(offer: NormalizedOffer) {
   const link = safeUrl(offer.url);
   const size = offer.sizeFit === 'confirmed' ? (offer.sizes?.join(', ') || 'passende Größe bestätigt') : 'nicht verifiziert – im Shop prüfen';
   const extraCostsUnknown = !offer.shippingKnown || offer.returnCostEur == null;
-  return `<tr><td width="150" valign="top" style="padding:16px 16px 16px 0;border-bottom:1px solid #ddd">${image ? `<img src="${esc(image)}" alt="${esc(offer.name)}" width="140" style="max-width:140px;height:auto">` : ''}</td>
-    <td valign="top" style="padding:16px 0;border-bottom:1px solid #ddd"><strong>${esc(offer.brand)} ${esc(offer.name)}</strong><br>${esc(offer.merchant)}
-    ${offer.description ? `<p>${esc(offer.description)}</p>` : ''}<p>Farbe: ${esc(offer.color || 'nicht verifiziert')} · Größe: <strong>${esc(size)}</strong></p>
+  return `<tr><td width="110" valign="top" style="padding:12px 12px 12px 0;border-bottom:1px solid #ddd">${image ? `<img src="${esc(image)}" alt="" width="100" style="max-width:100px;height:auto">` : ''}</td>
+    <td valign="top" style="padding:12px 0;border-bottom:1px solid #ddd"><strong>${esc(offer.brand)} ${esc(offer.name)}</strong><br>${esc(offer.merchant)}
+    <p>Farbe: ${esc(offer.color || 'nicht verifiziert')} · Größe: <strong>${esc(size)}</strong></p>
     <strong style="font-size:20px">${eur(offer.effectiveCostEur)}</strong>${extraCostsUnknown ? ' <small>zzgl. ggf. ungeklärter Versand-/Retourenkosten</small>' : ''}<br>
     Preis: ${eur(offer.priceEur)} · Früherer/Referenzpreis: ${offer.rrpEur == null ? 'nicht angegeben' : eur(offer.rrpEur)} · Rabatt${extraCostsUnknown ? ' vor ungeklärten Nebenkosten' : ' nach bekannten Nebenkosten'}: ${pct(offer.effectiveDiscountPct)}<br>
     ${esc(offer.class)} · Score ${offer.score}/100 · Versand: ${offer.shippingKnown ? eur(offer.shippingEur) : 'nicht verifiziert'} · Rücksendekosten: ${offer.returnCostEur == null ? 'nicht verifiziert' : eur(offer.returnCostEur)}

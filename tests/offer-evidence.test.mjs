@@ -136,3 +136,14 @@ test('brands match without diacritics and removed labels are rejected',async()=>
   assert.equal((await normalizeOfferChecked({...offer,brand:'Stoic'})).reason,'brand-not-allowed');
   assert.equal((await normalizeOfferChecked({...offer,brand:'Adidas Terrex'})).reason,'brand-not-allowed');
 });
+
+test('explicitly labelled reference prices count, unlabelled second prices do not',()=>{
+  const source={id:'sportscheck',name:'SportScheck',country:'DE',baseUrl:'https://www.sportscheck.com',priority:2};
+  const html=`<article class="product-card"><a href="/p/1">Haglöfs · Mid Standard Pant Herren Wanderhose</a><span>UVP 150,00 €</span><span>74,99 €</span></article>
+    <article class="product-card"><a href="/p/2">Mammut Runbold Pants Men Wanderhose</a><span>69,99 €</span><span>Listino: 129,95 €</span></article>
+    <article class="product-card"><a href="/p/3">Rab Incline Pants Wanderhose</a><span>89,95 €</span><span>ab 120,00 €</span></article>`;
+  const [a,b,c]=extractHtmlFallback(html,source,'https://www.sportscheck.com/wandern/sale/');
+  assert.equal(a.price,74.99); assert.equal(a.rrp,150); assert.equal(a.rrpSource,'html:labelled-reference-price');
+  assert.equal(b.price,69.99); assert.equal(b.rrp,129.95);
+  assert.equal(c.rrp,undefined,'an unlabelled higher price is no evidence');
+});

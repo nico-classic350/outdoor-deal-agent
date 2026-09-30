@@ -174,3 +174,58 @@ test('rendered cards use visually struck-through prices and discount badges as e
     process.env = saved;
   }
 });
+
+test('product-page size check returns only selectable sizes', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>Keb Trousers M</h1>
+    <div class="size-selector"><button>46</button><button disabled>48</button><button>50</button>
+    <button class="sold-out">52</button><button>54</button></div>
+    <div class="variant-picker"><button>Schwarz</button></div></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { verifyProductSizes } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  const { sizeEvidence } = await import('../lib/product-rules.mjs');
+  try {
+    const sizes = await verifyProductSizes(`http://127.0.0.1:${server.address().port}/p/keb`);
+    assert.deepEqual(sizes, ['46', '50', '54']);
+    assert.equal(sizeEvidence(sizes), 'probable', 'German 50 is near the W34 target');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});
+
+test('shop card rules read cards the generic selectors miss', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+    <div class="card--product"><div class="card-image"><a href="/pantalon-norrona-falketind/product-1"><img src="/i.jpg"></a><div class="card-tag tag-discount">-45%</div></div>
+      <div class="card-content"><div class="card-product-name"><a href="/pantalon-norrona-falketind/product-1"><strong>norrøna</strong> pantalón falketind flex1 hombre</a></div>
+      <div class="card-product-price"><span class="price is__discount">104,45 €</span><span class="price is__old">189,90 €</span></div></div></div>
+    </body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/outlet`;
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { browserExtract } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const source = { id: 'barrabes', name: 'Barrabes', country: 'ES', baseUrl: url, priority: 1 };
+    const result = await browserExtract(source, url, { deadline: Date.now() + 30000 });
+    const offer = result.offers.find(o => o.url.endsWith('/pantalon-norrona-falketind/product-1'));
+    assert.ok(offer, JSON.stringify(result));
+    assert.equal(offer.price, 104.45);
+    assert.equal(offer.rrp, 189.9);
+    assert.ok(offer.rrpSource);
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});

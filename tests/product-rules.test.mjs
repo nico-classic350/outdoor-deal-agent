@@ -88,22 +88,23 @@ test('unknown size and shipping do not suppress a proven 40% deal', () => {
   assert.equal(selectOffers([explicitNo]).deals.length, 0);
 });
 
-test('sixth qualifying deal is not relabeled as a near miss', () => {
+test('every qualifying deal is published, none relabeled as a near miss', () => {
   const offers=Array.from({length:6},(_,i)=>({sourceId:'x',brand:'Mammut',name:'Herren Wanderhose',
     url:`https://example.org/p/${i}`,sizeFit:'confirmed',shippingKnown:true,rrpVerified:true,
     effectiveDiscountPct:60,effectiveCostEur:50,productFitScore:85,score:100-i}));
   const result=selectOffers(offers);
   assert.equal(result.qualifiedCount,6);
-  assert.equal(result.deals.length,5);
+  assert.equal(result.deals.length,6);
   assert.equal(result.near.length,0);
 });
 
-test('uncertain sizes qualify while only the five highest ranked appear as deals', () => {
+test('uncertain sizes qualify and all qualified deals are listed by rank', () => {
   const offers=Array.from({length:8},(_,i)=>({sourceId:'x',brand:'Lundhags',name:'Herren Wanderhose',
     url:`https://example.org/p/${i}`,sizeFit:'unconfirmed',shippingKnown:false,discountVerified:true,
     effectiveDiscountPct:58,effectiveCostEur:65,productFitScore:80,score:80-i}));
   const result=selectOffers(offers);
-  assert.equal(result.deals.length,5);
+  assert.equal(result.deals.length,8);
+  assert.deepEqual(result.deals.map(d=>d.score),[80,79,78,77,76,75,74,73]);
   assert.equal(result.qualifiedCount,8);
   assert.equal(result.near.length,0);
 });
@@ -161,4 +162,20 @@ test('size evidence across a whole size list', () => {
   assert.equal(sizeEvidence(['24 K', '25 K', '27 K']), 'probable');
   assert.equal(sizeEvidence(['One Size']), 'unconfirmed');
   assert.equal(sizeEvidence(['S', 'One Size']), 'unconfirmed', 'unknown systems never reject');
+});
+
+test('women abbreviations, casual/warm styles and foreign trouser words are classified', () => {
+  assert.equal(productEligible('Lundhags Authentic II Ws Pant'), false);
+  assert.equal(productEligible('Lundhags Makke Pro Ws Pant'), false);
+  assert.equal(productEligible('Lundhags Makke Pro Ms Pant'), true);
+  assert.equal(productEligible('Peak Performance Casual pants'), false);
+  assert.equal(productEligible('Goldwin G-AXIS Wide Pants'), false);
+  assert.equal(productEligible('Goldwin Light Warmer Kochi Pants'), false);
+  assert.equal(productEligible('Pantalone trekking uomo Salewa Puez'), true);
+  assert.equal(productEligible('Pantaloni donna Salewa'), false);
+  assert.equal(productEligible('Haglöfs Mid Standard Pant Men'), true);
+  for (const name of ['50% Houdini Wadi Pants Freizeithose', 'bis 56% Patagonia Synch Pants Fleecehose', '45% Peak Performance Trail Tech Pants Radhose',
+    '40% Patagonia Nomader Joggers Freizeithose', 'bis 50% Rab Torque Mountain Pants Tourenhose']) assert.equal(productEligible(name), false, name);
+  assert.equal(productEligible('50% Dynafit Transalper DST Pants Trekkinghose'), true);
+  assert.equal(productEligible('Mountain Equipment - Sella Pant - Softshellhose - Goblin Blue'), true);
 });

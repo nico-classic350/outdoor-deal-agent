@@ -1,9 +1,11 @@
 import { RawOffer, ShopSource } from './types';
-import { extractHtmlFallback, extractJsonLd } from './extract';
+import { extractHtmlFallback, extractJsonLd, labelledReferencePrice } from './extract';
 import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract';
 import { browserFallbackConfig } from './browser-config.mjs';
 import { reserveBrowserSession } from './browser-budget';
 import { newLocalContext } from './local-browser';
+import { normalizeSizeLabel } from './product-rules.mjs';
+import { BROWSER_CARD_RULES, BrowserCardRule } from '../config/browser-cohort';
 import pLimit from 'p-limit';
 
 // A batch runs several shops concurrently. Keep its Browserless sessions serial
@@ -285,17 +287,22 @@ async function extractRenderedDomOffers(
   pageUrl: string,
 ): Promise<RawOffer[]> {
   try {
-    const rows = await page.locator(PRODUCT_SELECTOR).evaluateAll((elements) => elements.slice(0, 120).map((element) => {
+    // Shop-specific card rules (config/browser-cohort.ts) win over the generic selectors.
+    const rule: BrowserCardRule | null = BROWSER_CARD_RULES[source.id] || null;
+    const rows = await page.locator(rule?.card || PRODUCT_SELECTOR).evaluateAll((elements, rule) => elements.slice(0, 120).map((element) => {
       const el = element as HTMLElement;
-      const anchor = el.querySelector('a[href]') as HTMLAnchorElement | null;
-      const nameEl = el.querySelector('[itemprop="name"], [data-testid*="name"], [data-testid*="title"], h2, h3, h4, [class*="title"], [class*="name"]') as HTMLElement | null;
-      const brandEl = el.querySelector('[itemprop="brand"], [data-testid*="brand"], [class*="brand"]') as HTMLElement | null;
+      const pick = (selector: string | undefined, fallback: string) => el.querySelector(selector || fallback) as HTMLElement | null;
+      const anchor = (el.matches('a[href]') ? el : el.querySelector('a[href]')) as HTMLAnchorElement | null;
+      const nameEl = pick(rule?.name, '[itemprop="name"], [data-testid*="name"], [data-testid*="title"], h2, h3, h4, [class*="title"], [class*="name"]');
+      const brandEl = pick(rule?.brand, '[itemprop="brand"], [data-testid*="brand"], [class*="brand"]');
       const imageEl = el.querySelector('img') as HTMLImageElement | null;
-      const priceEl = el.querySelector('[itemprop="price"], [data-price], [data-testid*="price"], [class*="price"]') as HTMLElement | null;
+      const priceEl = pick(rule?.price, '[itemprop="price"], [data-price], [data-testid*="price"], [class*="price"]');
       const priceAttr = priceEl?.getAttribute('content') || priceEl?.getAttribute('data-price') || '';
+      const ruleReference = rule?.reference ? el.querySelector(rule.reference) as HTMLElement | null : null;
       // A reference price is only evidence when the shop visibly strikes it
-      // through (computed style or <del>/<s>), not merely "the higher number".
-      const struck = Array.from(el.querySelectorAll('*')).find((node) => {
+      // through (computed style or <del>/<s>) or a shop rule names the element
+      // that holds the crossed-out price, not merely "the higher number".
+      const struck = ruleReference || Array.from(el.querySelectorAll('*')).find((node) => {
         const n = node as HTMLElement;
         const t = (n.innerText || '').trim();
         if (!t || t.length > 30 || !/\d/.test(t) || n.children.length > 2) return false;
@@ -310,20 +317,24 @@ async function extractRenderedDomOffers(
         priceText: `${priceAttr} ${priceEl?.innerText || ''}`.trim(),
         struckText: (struck?.innerText || '').trim(),
       };
-    }));
+    }), rule);
 
     const seen = new Set<string>();
     const out: RawOffer[] = [];
     for (const row of rows) {
       if (!row.href || !row.name || seen.has(row.href)) continue;
       const textPrices = euroPrices(`${row.priceText} ${row.text}`);
-      const attrPrice = numberFromText(row.priceText);
+      // A bare attribute price is only trusted when the card shows no other currency
+      // (geo-redirected US/UK stores render "$200" / "£90").
+      const attrPrice = /\$|£|USD|GBP|SEK|NOK|DKK|CHF|PLN|CZK|zł|Kč/.test(row.text) ? undefined : numberFromText(row.priceText);
       const prices = textPrices.length ? textPrices : (attrPrice ? [attrPrice] : []);
       if (!prices.length) continue;
       const struckPrice = euroPrices(row.struckText)[0];
-      const current = prices.filter(value => value !== struckPrice);
+      const labelledPrice = struckPrice ? undefined : labelledReferencePrice(row.text);
+      const referencePrice = struckPrice || labelledPrice;
+      const current = prices.filter(value => value !== referencePrice);
       const price = Math.min(...(current.length ? current : prices));
-      const rrp = struckPrice && struckPrice > price ? struckPrice : undefined;
+      const rrp = referencePrice && referencePrice > price ? referencePrice : undefined;
       const badge = Number(row.text.match(/(?:^|\s)[-–−]\s?(\d{1,2})\s?%/)?.[1] || 0);
       const displayedDiscount = !rrp && badge >= 40 && badge < 100 ? badge : undefined;
       seen.add(row.href);
@@ -338,7 +349,7 @@ async function extractRenderedDomOffers(
         currency: 'EUR',
         price,
         rrp,
-        rrpSource: rrp ? 'html:struck-through-price' : undefined,
+        rrpSource: rrp ? (struckPrice ? 'html:struck-through-price' : 'html:labelled-reference-price') : undefined,
         observedDiscountPct: displayedDiscount,
         discountSource: displayedDiscount ? 'merchant:displayed-discount' : undefined,
         availability: /ausverkauft|sold out|out of stock|nicht verfügbar|épuisé|esaurito/i.test(row.text) ? 'out_of_stock' : 'unknown',
@@ -352,25 +363,61 @@ async function extractRenderedDomOffers(
   }
 }
 
+// Available (not disabled / sold-out) size labels on a product detail page.
+async function readAvailableSizes(page: import('playwright-core').Page): Promise<string[]> {
+  const selectors = [
+    '[data-testid*="size"] button', '[data-testid*="size"] label',
+    'button[name*="size"]', '[class*="size"] button', '[class*="size"] label', '[class*="size"] li',
+    '[class*="groesse"] button', '[class*="Groesse"] button', '[class*="variant"] button',
+    'input[name*="size"] + label', 'select[name*="size"] option', 'select[id*="size"] option',
+    'select[name*="groesse"] option', '[data-option-name*="size" i] label', '[data-option-name*="größe" i] label',
+  ].join(',');
+  const values = (await page.locator(selectors).evaluateAll(elements=>elements
+    .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out,[class*="unavailable"],[class*="soldout"],[class*="sold-out"]') &&
+      !(el instanceof HTMLOptionElement && el.disabled) &&
+      !(el instanceof HTMLButtonElement && el.disabled) &&
+      !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
+    .map(el=>(el.textContent||'').trim())))
+    .map(v => v.replace(/\s+/g, ' ').trim())
+    .filter(v => v.length <= 24 && (normalizeSizeLabel(v) !== 'unknown' ||
+      /^(?:W?\d{2,3}(?:\s*[/x]\s*L?\d{2})?|(?:EU|DE)\s*\d{2}|XXS|XS|S|M|L|XL|XXL|[2-5]XL)$/i.test(v)));
+  return [...new Set(values)].slice(0, 40);
+}
+
 async function enrichSingleOfferSizes(page: import('playwright-core').Page, offers: RawOffer[]) {
   if (offers.length !== 1 || !/\/products?\/|\/artikel\/|\/p\//i.test(page.url())) return offers;
   try {
-    const selectors = [
-      '[data-testid*="size"] button', '[data-testid*="size"] label',
-      'button[name*="size"]', '[class*="size"] button', '[class*="size"] label',
-      'input[name*="size"] + label', 'select[name*="size"] option',
-    ].join(',');
-    const values = (await page.locator(selectors).evaluateAll(elements=>elements
-      .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out') &&
-        !(el instanceof HTMLOptionElement && el.disabled) &&
-        !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
-      .map(el=>(el.textContent||'').trim())))
-      .map(v => v.replace(/\s+/g, ' ').trim())
-      .filter(v => /^(?:W?\d{2}(?:\s*\/\s*L?\d{2})?|(?:EU\s*)?\d{2}|XS|S|M|L|XL|XXL)$/i.test(v));
-    const unique = [...new Set(values)].slice(0, 30);
+    const unique = await readAvailableSizes(page);
     if (unique.length) { offers[0].sizes = unique; offers[0].sizeAvailability='available'; }
   } catch {}
   return offers;
+}
+
+/**
+ * Local Chromium only (GitHub Actions): open a deal candidate's product page and
+ * read which sizes are actually selectable. Returns null when the page could
+ * not be read, so callers keep the offer's size status unconfirmed.
+ */
+export async function verifyProductSizes(url: string, deadline = Date.now() + 25000): Promise<string[] | null> {
+  if (browserFallbackConfig().mode !== 'local-playwright') return null;
+  return localSessionLimit(async () => {
+    let context: import('playwright-core').BrowserContext | null = null;
+    try {
+      context = await newLocalContext();
+      const page = await context.newPage();
+      page.setDefaultTimeout(timeLeft(deadline, 5000));
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 15000) });
+      if (!response || response.status() >= 400) return null;
+      await dismissConsent(page);
+      await page.waitForTimeout(Math.min(2500, timeLeft(deadline, 2500)));
+      const sizes = await readAvailableSizes(page);
+      return sizes.length ? sizes : null;
+    } catch {
+      return null;
+    } finally {
+      try { if (context) await context.close(); } catch {}
+    }
+  });
 }
 
 // Shared page pipeline for remote (CDP) and local Chromium sessions.

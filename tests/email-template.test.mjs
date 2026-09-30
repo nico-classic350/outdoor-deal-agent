@@ -49,3 +49,18 @@ test('mail keeps thumbnails and summary for deals with unknown size and extra co
   assert.match(html,/nicht verifiziert – im Shop prüfen/);
   assert.match(html,/zzgl\. ggf\. ungeklärter Versand-\/Retourenkosten/);
 });
+
+test('all qualified deals are listed and the deal section stays compact', () => {
+  const deals = Array.from({ length: 70 }, (_, i) => ({ brand: 'Lundhags', name: `Makke Pant M ${i}`, merchant: 'Lundhags EU',
+    imageUrl: `https://img.example/${i}.jpg`, url: `https://shop.example/p/${i}`, description: 'x'.repeat(800),
+    effectiveCostEur: 99, priceEur: 99, rrpEur: 199, effectiveDiscountPct: 50, sizeFit: 'unconfirmed',
+    shippingKnown: false, shippingEur: 0, returnCostEur: null, class: 'Strong Deal', score: 70 - i }));
+  const report = { startedAt: '2026-10-01T00:00:00Z', finishedAt: '2026-10-01T04:00:00Z',
+    plannedSources: 0, attemptedSources: 0, success: 0, partial: 0, browser: 0, blocked: 0,
+    failed: 0, rawOffers: 0, normalizedOffers: 0, confirmedSizeOffers: 0, coverage: [] };
+  const html = renderRunEmail('2026-10-01', deals, [], report);
+  assert.equal((html.match(/Zum Shop/g) || []).length, 70);
+  assert.ok(!html.includes('x'.repeat(100)), 'listing descriptions are not repeated in the mail');
+  // Gmail clips messages above ~102 KB; 70 deals must stay well below that.
+  assert.ok(Buffer.byteLength(html) < 80_000, `deal section is ${Buffer.byteLength(html)} bytes`);
+});
