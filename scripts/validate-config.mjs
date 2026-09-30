@@ -61,7 +61,7 @@ assert(browserCrawl.includes("'DATABASE_URL'")&&browserCrawl.includes("'BROWSERL
 assert(!/agent_batch_runs|agent_runs|sendRunNotification|finalizeBatches/.test(browserCrawl+read('lib/browser-snapshots.ts')),'browser crawl never writes batches, reports or mail');
 assert(read('lib/batch-run.ts').includes('mergeSnapshot'),'Vercel batches merge fresh Chromium snapshots');
 { const cohort=read('config/browser-cohort.ts'); const known=new Set([...read('config/shops.ts').matchAll(/^([a-z0-9-]+)\|/gm)].map(m=>m[1]));
-  for(const id of [...cohort.matchAll(/'([a-z0-9-]+)'/g)].map(m=>m[1]).filter(x=>!['all','pilot','render','blocked','local'].includes(x))) assert(known.has(id),`browser cohort shop ${id} exists in the registry`); }
+  for(const id of [...cohort.matchAll(/'([a-z0-9-]+)'/g)].map(m=>m[1]).filter(x=>!['all','everything','pilot','render','blocked','local'].includes(x))) assert(known.has(id),`browser cohort shop ${id} exists in the registry`); }
 assert(browserSource.includes('browserWSEndpoint'),'blocked-page flow supports Browserless session handoff');
 assert(/BROWSERLESS_API_TOKEN/.test(browserConfig)&&/BROWSERLESS_TOKEN/.test(browserConfig),'Browserless token is read only from environment');
 const browserCheck=read('lib/browser-check.ts');

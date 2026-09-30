@@ -113,7 +113,7 @@ test('browser start URLs are same-shop listing pages', async () => {
   for (const [id, urls] of Object.entries(BROWSER_START_URLS)) {
     const shop = SHOPS.find(s => s.id === id);
     assert.ok(shop, `${id} exists`);
-    for (const u of urls) assert.equal(new URL(u).hostname, new URL(shop.baseUrl).hostname, `${u} stays on ${id}`);
+    for (const u of urls) assert.equal(new URL(u).hostname.replace(/^www\./, ''), new URL(shop.baseUrl).hostname.replace(/^www\./, ''), `${u} stays on ${id}`);
   }
 });
 
@@ -137,5 +137,40 @@ test('single-brand store names are valid profile brands', () => {
   for (const [id, brand] of Object.entries(SHOP_BRAND)) {
     assert.ok(SHOPS.some(s => s.id === id), `${id} exists`);
     assert.ok(PROFILE.brands.includes(brand), `${brand} is a profile brand`);
+  }
+});
+
+test('rendered cards use visually struck-through prices and discount badges as evidence', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><style>.was{text-decoration:line-through}</style></head><body><main>
+    <div class="product-tile"><a href="/p/keb-trousers">Fjällräven Keb Trousers M Wanderhose</a>
+      <span class="now">119,95 €</span> <span class="was">239,95 €</span></div>
+    <div class="product-tile"><a href="/p/abisko">Fjällräven Abisko Trekking Trousers M</a>
+      <span class="badge">-45 %</span> <span>98,95 €</span></div>
+    <div class="product-tile"><a href="/p/vidda">Fjällräven Vidda Pro Trousers M</a>
+      <span>129,95 €</span> <span>ab 150,00 €</span></div>
+  </main></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/herren/hosen`;
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { browserExtract } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  try {
+    const source = { id: 'fjallraven-eu', name: 'Fjällräven EU', country: 'SE', baseUrl: url, priority: 1 };
+    const result = await browserExtract(source, url, { deadline: Date.now() + 30000 });
+    const byPath = Object.fromEntries(result.offers.map(o => [new URL(o.url).pathname, o]));
+    assert.equal(byPath['/p/keb-trousers']?.price, 119.95);
+    assert.equal(byPath['/p/keb-trousers']?.rrp, 239.95);
+    assert.equal(byPath['/p/keb-trousers']?.rrpSource, 'html:struck-through-price');
+    assert.equal(byPath['/p/abisko']?.observedDiscountPct, 45);
+    assert.equal(byPath['/p/abisko']?.discountSource, 'merchant:displayed-discount');
+    assert.equal(byPath['/p/vidda']?.rrpSource, undefined, 'an unmarked higher price is not evidence');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
   }
 });

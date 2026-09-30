@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       shops:
-        description: 'all | render | blocked | pilot | comma-separated shop IDs'
+        description: 'all (= render) | render | blocked | everything | pilot | comma-separated shop IDs'
         required: false
         default: 'pilot'
       compare:

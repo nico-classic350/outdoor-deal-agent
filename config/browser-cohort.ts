@@ -27,7 +27,11 @@ export function browserCohort(selection = 'all'): string[] {
   if (selection === 'pilot') return [...BROWSER_COHORT.pilot];
   if (selection === 'render') return [...BROWSER_COHORT.render];
   if (selection === 'blocked') return [...BROWSER_COHORT.blocked];
-  if (selection === 'all' || !selection) return [...BROWSER_COHORT.render, ...BROWSER_COHORT.blocked];
+  // The nightly run skips the blocked group: the 30 September 2026 survey showed
+  // every one of them behind Cloudflare/Akamai bot protection for a datacenter
+  // browser (403 "Nur einen Moment…"), and the crawler does not evade that.
+  if (selection === 'all' || !selection) return [...BROWSER_COHORT.render];
+  if (selection === 'everything') return [...BROWSER_COHORT.render, ...BROWSER_COHORT.blocked];
   return selection.split(',').map(id => id.trim()).filter(Boolean);
 }
 
@@ -44,6 +48,13 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   // /de is the euro store; /en serves GBP to the US runner.
   'haglofs-eu': ['https://www.haglofs.com/de/herren/hosen-herren/hosen-lange-hosen-herren'],
   // Sale first, then Kurzgrößen (inseam fits the profile better than Übergrößen).
+  // From the all-shop survey (diagnose run, 30 September 2026): outlet/sale
+  // pages with struck-through prices first, then men's trousers listings.
+  'sportfits': ['https://sportfits.de/sale?p=1&minDiscount=50&o=15', 'https://sportfits.de/urban-fashion-herren-hosen'],
+  'camp4': ['https://www.camp4.de/outlet/', 'https://www.camp4.de/outdoor-hosen/?p=1&o=1&n=48&f=2'],
+  'snowcountry': ['https://www.snowcountry.eu/outlet/outlet-heren.html'],
+  'feinbier': ['https://www.feinbier-unterwegs.de/outlet/', 'https://www.feinbier-unterwegs.de/herren/bekleidung/hosen/'],
+  'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
   'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
 };
 
