@@ -163,3 +163,15 @@ test('size evidence across a whole size list', () => {
   assert.equal(sizeEvidence(['One Size']), 'unconfirmed');
   assert.equal(sizeEvidence(['S', 'One Size']), 'unconfirmed', 'unknown systems never reject');
 });
+
+test('women abbreviations, casual/warm styles and foreign trouser words are classified', () => {
+  assert.equal(productEligible('Lundhags Authentic II Ws Pant'), false);
+  assert.equal(productEligible('Lundhags Makke Pro Ws Pant'), false);
+  assert.equal(productEligible('Lundhags Makke Pro Ms Pant'), true);
+  assert.equal(productEligible('Peak Performance Casual pants'), false);
+  assert.equal(productEligible('Goldwin G-AXIS Wide Pants'), false);
+  assert.equal(productEligible('Goldwin Light Warmer Kochi Pants'), false);
+  assert.equal(productEligible('Pantalone trekking uomo Salewa Puez'), true);
+  assert.equal(productEligible('Pantaloni donna Salewa'), false);
+  assert.equal(productEligible('Haglöfs Mid Standard Pant Men'), true);
+});

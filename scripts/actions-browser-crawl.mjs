@@ -65,7 +65,10 @@ async function verifyDealSizes(offers, coverage) {
     const sizes = await verifyProductSizes(offer.url);
     if (sizes) { offer.sizes = sizes; offer.sizeAvailability = 'available'; confirmed++; }
   }
-  if (candidates.length) (coverage.technicalPath ||= []).push(`size-check-${confirmed}-of-${candidates.length}`);
+  if (candidates.length) {
+    (coverage.technicalPath ||= []).push(`size-check-${confirmed}-of-${candidates.length}`);
+    console.log(`[sizes] ${JSON.stringify({ shop: coverage.sourceId, checked: candidates.length, confirmed })}`);
+  }
 }
 
 async function measure(source, runtime) {
