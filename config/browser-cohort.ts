@@ -12,12 +12,14 @@ export const BROWSER_COHORT = {
     'peakperformance-eu', 'goldwin-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
     // Premium brand stores added with the September 2026 brand review.
-    'fjallraven-eu', 'lundhags-eu', 'bergans-eu', 'klattermusen-eu', 'montura-eu',
+    // (fjallraven-eu is Cloudflare-protected, montura-eu shows a closed-store
+    // password page; both were surveyed on 30 September 2026.)
+    'lundhags-eu', 'bergans-eu', 'klattermusen-eu',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
     'ekosport', 'vieux-campeur', '8a', 'e-horyzont', 'sportler', 'oliunid', 'nencini', 'galeria',
-    'ortovox-eu', 'lasportiva-eu',
+    'ortovox-eu', 'lasportiva-eu', 'fjallraven-eu',
   ],
   // Small fixed cohort for A/B measurements (direct-only vs. direct + Chromium).
   pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'peakperformance-eu', 'trekkinn', 'outdoor-renner'],
@@ -55,6 +57,8 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'snowcountry': ['https://www.snowcountry.eu/outlet/outlet-heren.html'],
   'feinbier': ['https://www.feinbier-unterwegs.de/outlet/', 'https://www.feinbier-unterwegs.de/herren/bekleidung/hosen/'],
   'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
+  'lundhags-eu': ['https://lundhags.com/eu/category/outlet', 'https://lundhags.com/eu/category/clothing/men/pants'],
+  'klattermusen-eu': ['https://www.klattermusen.com/de-de/men/pants/'],
   'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
 };
 
