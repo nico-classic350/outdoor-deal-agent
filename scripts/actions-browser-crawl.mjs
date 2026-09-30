@@ -35,7 +35,11 @@ const { productEligible, selectOffers } = require('../lib/product-rules.mjs');
 const { closeLocalBrowser } = require('../lib/local-browser.ts');
 const { ensureSnapshotTable, saveSnapshot } = require('../lib/browser-snapshots.ts');
 
-const ids = browserCohort(selection);
+// 'registry' simulates the whole daily pipeline: every registered shop, with
+// Chromium only for the nightly cohort (as production merges snapshots only
+// for those shops). Used for a manual before/after comparison.
+const cohort = new Set(browserCohort('all'));
+const ids = selection === 'registry' ? SHOPS.map(shop => shop.id) : browserCohort(selection);
 const sources = ids.map(id => {
   const source = SHOPS.find(shop => shop.id === id);
   if (!source) throw new Error(`unknown shop id: ${id}`);
@@ -51,6 +55,7 @@ async function measure(source, runtime) {
   return {
     offers,
     coverage,
+    normalized,
     metrics: {
       rawOffers: offers.length,
       uniqueProductUrls: new Set(offers.map(o => o.url)).size,
@@ -73,7 +78,7 @@ async function measure(source, runtime) {
 async function runArm(runtime) {
   const limit = pLimit(Number(process.env.SHOP_CONCURRENCY || 3));
   return Promise.all(sources.map(source => limit(async () => {
-    const result = await measure(source, runtime);
+    const result = await measure(source, runtime === 'local' && (selection !== 'registry' || cohort.has(source.id)) ? 'local' : 'direct');
     console.log(`[${runtime}] ${JSON.stringify({ shop: source.id, ...result.metrics, browserSteps: result.metrics.browserSteps.slice(0, 12) })}`);
     return { shop: source.id, ...result };
   })));
@@ -95,7 +100,7 @@ if (writeSnapshot) {
 }
 let stored = 0;
 if (sql) {
-  for (const row of local) {
+  for (const row of local.filter(r => cohort.has(r.shop))) {
     // Store every attempt (also empty ones) so health shows the job ran.
     await saveSnapshot(sql, {
       shopId: row.shop,
@@ -118,6 +123,16 @@ const summary = {
   shopsWithProducts: { direct: direct?.filter(r => r.metrics.rawOffers > 0).length ?? null, local: local.filter(r => r.metrics.rawOffers > 0).length },
   perShop: local.map(r => ({ shop: r.shop, local: r.metrics, direct: direct?.find(d => d.shop === r.shop)?.metrics ?? null })),
 };
+// Report-level selection across all shops (same rules as the daily report).
+const report = arm => {
+  if (!arm) return null;
+  const { deals, near, qualifiedCount } = selectOffers(arm.flatMap(r => r.normalized), 40);
+  return { qualifiedCount, nearMisses: near.length, deals: deals.map(o => ({ shop: o.sourceId, brand: o.brand, name: o.name,
+    priceEur: Math.round(o.priceEur * 100) / 100, rrpEur: o.rrpEur ? Math.round(o.rrpEur * 100) / 100 : null,
+    effectiveDiscountPct: Math.round(o.effectiveDiscountPct), evidence: o.rrpVerified ? o.rrpSource : o.discountSource, sizeFit: o.sizeFit, url: o.url })) };
+};
+summary.report = { direct: report(direct), local: report(local) };
+console.log(`[report] ${JSON.stringify(summary.report)}`);
 mkdirSync('observability', { recursive: true });
 writeFileSync('observability/actions-browser-summary.json', JSON.stringify(summary, null, 2) + '\n');
 console.log(`[total] ${JSON.stringify({ totals: summary.totals, shopsWithProducts: summary.shopsWithProducts, snapshotsStored: stored })}`);
@@ -127,5 +142,10 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `| Metric | ${compare ? 'Direct only | ' : ''}Direct + Chromium |`, `| --- | ${compare ? '---: | ' : ''}---: |`,
     ...keys.map(k => `| ${k} | ${compare ? `${summary.totals.direct[k]} | ` : ''}${summary.totals.local[k]} |`),
     `| shopsWithProducts | ${compare ? `${summary.shopsWithProducts.direct} | ` : ''}${summary.shopsWithProducts.local} |`, ''];
+  for (const [arm, r] of Object.entries(summary.report)) if (r) {
+    lines.push(`### Report selection (${arm === 'local' ? 'direct + Chromium' : 'direct only'}): ${r.qualifiedCount} qualified, ${r.nearMisses} near misses`, '',
+      '| Shop | Product | Price | Reference | Effective discount | Size |', '| --- | --- | ---: | ---: | ---: | --- |',
+      ...r.deals.map(d => `| ${d.shop} | ${d.brand} ${String(d.name).replace(/\|/g, '/')} | ${d.priceEur} € | ${d.rrpEur ?? d.evidence} | ${d.effectiveDiscountPct} % | ${d.sizeFit} |`), '');
+  }
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
 }

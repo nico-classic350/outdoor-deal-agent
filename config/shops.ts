@@ -33,7 +33,6 @@ alpinstore|Alpinstore|FR|https://www.alpinstore.com|2
 speck-sports|Speck Sports|FR|https://www.speck-sports.com|2
 chullanka|Chullanka|FR|https://www.chullanka.com|2
 vieux-campeur|Au Vieux Campeur|FR|https://www.auvieuxcampeur.fr|2
-trekkinn|Trekkinn|ES|https://www.tradeinn.com/trekkinn|2
 snowinn|Snowinn|ES|https://www.tradeinn.com/snowinn|2
 barrabes|Barrabes|ES|https://www.barrabes.com|1
 scandinavian-outdoor|Scandinavian Outdoor|FI|https://scandinavianoutdoor.com|1
@@ -92,8 +91,7 @@ carl-denig|Carl Denig|NL|https://www.carldenig.nl|2
 glisshop|Glisshop|FR|https://www.glisshop.com|2
 outnorth|Outnorth|SE|https://www.outnorth.com|2
 bergans-eu|Bergans EU|NO|https://www.bergans.com|1
-klattermusen-eu|Klättermusen EU|SE|https://www.klattermusen.com|1
-montura-eu|Montura EU|IT|https://www.montura.com|2`;
+klattermusen-eu|Klättermusen EU|SE|https://www.klattermusen.com|1`;
 
 export const SHOPS: ShopSource[] = DATA.split('\n').map((line) => {
   const [id, name, country, baseUrl, priority] = line.split('|');
@@ -107,6 +105,6 @@ export const SHOP_BRAND: Record<string, string> = {
   'lasportiva-eu': 'La Sportiva', 'mammut-eu': 'Mammut', 'patagonia-eu': 'Patagonia', 'rab-eu': 'Rab',
   'norrona-eu': 'Norrøna', 'haglofs-eu': 'Haglöfs', 'fjallraven-eu': 'Fjällräven', 'lundhags-eu': 'Lundhags',
   'peakperformance-eu': 'Peak Performance', 'houdini-eu': 'Houdini', 'bergans-eu': 'Bergans',
-  'klattermusen-eu': 'Klättermusen', 'montura-eu': 'Montura',
+  'klattermusen-eu': 'Klättermusen',
   'goldwin-eu': 'Goldwin', 'tilak-eu': 'Tilak', '66north-eu': '66°North',
 };
