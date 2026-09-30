@@ -32,14 +32,14 @@ This file is the compact source-of-truth handoff for AI development sessions (Cl
 - no rain/hardshell, winter/ski, zip-off, heavy alpine or loud designs
 - Rabatt-Deals require verified same-variant prior/reference price or explicit merchant discount, allowed brand/category and at least 40% discount. Missing size, shipping and returns are disclosed but do not exclude. Explicitly incompatible available sizes, sold-out items and excluded categories still do.
 - size labels from all systems are normalised onto L / W33–34 ≤ L32 (`normalizeSizeLabel`); the Actions job verifies selectable sizes on the product page of each potential deal (max 6 per shop)
-- price evidence: JSON-LD/feed reference prices, Shopify `compare_at_price`, visually struck-through prices, explicitly labelled reference prices (UVP/statt/Listino/RRP …) and ≥ 40 % merchant badges; an unlabelled higher price is never evidence
+- price evidence: JSON-LD/feed reference prices, Shopify `compare_at_price`, WooCommerce/Magento `regular_price`, visually struck-through prices, explicitly labelled reference prices (UVP/statt/Listino/RRP …) and ≥ 40 % merchant badges; an unlabelled higher price is never evidence
 - every qualified deal is listed in the report and mail (ranked by score); no top-N cut-off
 - deal qualification and scoring are deterministic TypeScript rules
 - Mammut men's category is targeted; product cards are discovery data and carry no invented UVP
 
 ## Acquisition order
 
-1. official feed/API where available, including Shopify collection JSON (`config/shopify-sources.ts`, verified euro stores)
+1. official feed/API where available, including Shopify collection JSON (`config/shopify-sources.ts`, verified euro stores) and WooCommerce Store API / Magento GraphQL (`config/commerce-sources.ts`); in the nightly Actions run, shops whose relevant products lack price evidence also render their configured sale/outlet start pages
 2. targeted retailer parsers
 3. generic feed/sitemap/direct HTTP + JSON-LD/HTML
 4. GitHub Actions Chromium snapshot (nightly `browser-crawl.yml`, `agent_browser_snapshots`, merged by the batches when younger than 30 h)

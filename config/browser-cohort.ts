@@ -17,6 +17,9 @@ export const BROWSER_COHORT = {
     // Shops whose direct crawl found no relevant products (whole-pipeline run,
     // 30 September 2026) but whose listings render with euro prices.
     'tapir', 'sportscheck', 'sportano', 'bottero', 'bever', 'verticalextreme',
+    // Direct pages list products without reference prices; their sale/outlet
+    // pages show struck-through prices (registry diagnosis, 30 September 2026).
+    'engelhorn', 'sportokay', 'sport-conrad', 'gigasport',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
@@ -61,6 +64,10 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'asadventure': ['https://www.asadventure.com/nl/c/outlet/heren.html'],
   'lundhags-eu': ['https://lundhags.com/eu/category/outlet', 'https://lundhags.com/eu/category/clothing/men/pants'],
   'klattermusen-eu': ['https://www.klattermusen.com/de-de/men/pants/'],
+  'engelhorn': ['https://www.engelhorn.de/de-de/herren/sale/'],
+  'sportokay': ['https://www.sportokay.com/de_de/alle/deals.html'],
+  'sport-conrad': ['https://www.sport-conrad.com/outlet/', 'https://www.sport-conrad.com/outdoorbekleidung/outdoor-hosen/herren/'],
+  'gigasport': ['https://www.gigasport.at/shop-sale/sale-1/'],
   'barrabes': ['https://www.barrabes.com/outlet', 'https://www.barrabes.com/pantalones-trekking-hombre/c-18'],
   'biwak': ['https://www.biwak.com/Sale/', 'https://www.biwak.com/Herren/Bekleidung/Hosen/Lange-Hosen/'],
   'varuste': ['https://varuste.net/c3455/outlet-tuotteet'],

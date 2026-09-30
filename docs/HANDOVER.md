@@ -73,6 +73,8 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 
 **Deal-Ausbeute (30. September, abends):** Bericht und E-Mail listen jetzt **alle** qualifizierten Deals (nach Score sortiert, kompakte Zeilen gegen Gmail-Kürzung), nicht mehr nur die Top 5. Neue Belegquellen: Shopify-`compare_at_price` (DF Sport, SportIT direkt auf Vercel, ohne Browser), ausdrücklich beschriftete Referenzpreise (UVP, statt, Listino, RRP) und optisch durchgestrichene Preise; ein unbeschrifteter höherer Preis zählt nie. Für mögliche Deals öffnet der Actions-Lauf die Produktseite und liest nur wählbare Größen (max. 6 je Shop). Neu im Chromium-Lauf: Tapir, SportScheck, Sportano, Bottero, Bever, VerticalExtreme. Publisher-/Affiliate-Anmeldungen werden vorerst nicht verfolgt.
 
+**Weitere Shop-Schnittstellen (30. September, spät):** Sport Förg läuft über Shopify-JSON (118 relevante Hosen, 59 mit Referenzpreis), Snowcountry und Maxisport über die öffentliche Magento-Schnittstelle (`config/commerce-sources.ts`; Maxisport antwortet dem US-Runner mit 503). Findet ein Shop relevante Produkte ohne Streichpreis, öffnet der nächtliche Actions-Lauf zusätzlich dessen Sale-/Outlet-Seiten (Engelhorn, Sportokay, Sport Conrad, Gigasport u. a.). Die Diagnose (`diagnose=true`, `shops=registry`) prüft jetzt auch Shopify-, WooCommerce- und Magento-Schnittstellen aller Shops.
+
 ## Übernahme und Prüfung
 
 1. Repository klonen, `corepack enable`, `corepack pnpm install --frozen-lockfile`, `corepack pnpm run preflight` ausführen. Keine Secrets ins Repository schreiben.

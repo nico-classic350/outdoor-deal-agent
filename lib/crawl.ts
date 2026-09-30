@@ -13,6 +13,8 @@ import { browserStartUrls } from '../config/browser-cohort';
 import { SHOP_BRAND } from '../config/shops';
 import { SHOPIFY_SOURCES } from '../config/shopify-sources';
 import { ingestShopify } from './shopify';
+import { COMMERCE_SOURCES } from '../config/commerce-sources';
+import { ingestCommerceApi } from './commerce-apis';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
@@ -100,6 +102,17 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
     sourceId:source.id,name:source.name,status,discoveredUrls:discovered.length,parsedOffers:offers.length,
     elapsedMs:Date.now()-start,note,technicalPath:[...new Set(technicalPath)],httpStatuses:[...new Set(httpStatuses)]
   });
+  // Nightly Actions browser only: when relevant products were parsed but none of
+  // them carries price evidence (other listings may), render the configured
+  // sale/outlet pages, which show the struck-through reference prices.
+  const renderStartPagesForEvidence = async () => {
+    const relevant=offers.filter(o=>productEligible(o.name,o.description));
+    if(!relevant.length || relevant.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))) return;
+    const startUrls=browserStartUrls(source.id);
+    if(browserFallbackMode()!=='local-playwright' || !startUrls.length || browserAttempted) return;
+    technicalPath.push('browser-start-pages-for-evidence');
+    await browserFallback(startUrls,false);
+  };
   const browserFallback = async (urls:string[], blocked=false) => {
     if(browserAttempted){technicalPath.push('browser-already-attempted');return false;}
     browserAttempted=true;
@@ -151,6 +164,22 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         }
         technicalPath.push('shopify-json-empty');
       }catch{ technicalPath.push('shopify-json-error'); }
+    }
+
+    const commerce=COMMERCE_SOURCES[source.id];
+    if(commerce){
+      technicalPath.push(`${commerce.type}-api`);
+      try{
+        const result=await ingestCommerceApi(source,commerce,deadline);
+        httpStatuses.push(...result.statuses);
+        discovered=[`${commerce.origin} (${commerce.type} API)`];
+        if(result.offers.length){
+          offers.push(...result.offers);
+          technicalPath.push(`${commerce.type}-api-success`);
+          return {offers,coverage:coverage('success',`${commerce.type} storefront API (sale and regular price)`)};
+        }
+        technicalPath.push(`${commerce.type}-api-empty`);
+      }catch{ technicalPath.push(`${commerce.type}-api-error`); }
     }
 
     if(source.id==='globetrotter'){
@@ -234,6 +263,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         offers.splice(0,offers.length,...offers.filter(o=>!detailedUrls.has(o.url.toLowerCase())),...detailOffers);
       }
       if(offers.some(o=>o.rrpSource || (o.discountSource&&Number(o.observedDiscountPct)>=40))){
+        await renderStartPagesForEvidence();
         return {offers,coverage:coverage('success','Targeted brand listing crawl produced product cards')};
       }
       technicalPath.push('targeted-listings-empty','generic-fallback');
@@ -246,6 +276,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
       offers.push(...feedOffers);
       technicalPath.push('feed-success');
       discovered=[source.feedUrl || source.baseUrl];
+      await renderStartPagesForEvidence();
       return {offers,coverage:coverage('success','Structured feed')};
     }
 
@@ -330,6 +361,15 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
         return {offers,coverage:coverage(offers.length?'partial':'failed',offers.length?'Products parsed, but no verified reference price':'No parseable data; Browserless token not configured')};
       }
       if(offers.some(o=>productEligible(o.name,o.description))){
+        // The nightly GitHub Actions browser has no per-session cost: when direct
+        // pages found products but no price evidence, render the shop's configured
+        // sale/outlet pages, which carry the struck-through prices.
+        const startUrls=browserStartUrls(source.id);
+        if(browserFallbackMode()==='local-playwright' && startUrls.length && !browserAttempted){
+          technicalPath.push('browser-start-pages-for-evidence');
+          const succeeded=await browserFallback(startUrls,false);
+          return {offers,coverage:coverage(succeeded?'browser':'partial',succeeded?'Sale/outlet pages rendered for price evidence':'Relevant products parsed, but no verified reference price')};
+        }
         technicalPath.push('browser-skipped-existing-products');
         return {offers,coverage:coverage('partial','Relevant products parsed; browser session reserved for empty or blocked shops')};
       }
@@ -341,6 +381,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
       const succeeded=await browserFallback(candidates,false);
       return {offers,coverage:coverage(succeeded?'browser':offers.length?'partial':'failed',succeeded?'Browserless rendered-page/Playwright fallback succeeded':offers.length?'Products parsed, but no verified reference price':'No parseable data after Browserless fallback')};
     }
+    await renderStartPagesForEvidence();
     const status = discovered.length>1?'success':'partial';
     return {offers,coverage:coverage(status,'Direct crawl produced parseable product data')};
   } catch(e:any){
