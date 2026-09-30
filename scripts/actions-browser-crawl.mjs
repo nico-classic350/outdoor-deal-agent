@@ -33,6 +33,7 @@ const { crawlSource } = require('../lib/crawl.ts');
 const { normalizeOfferChecked } = require('../lib/normalize.ts');
 const { productEligible, selectOffers } = require('../lib/product-rules.mjs');
 const { closeLocalBrowser } = require('../lib/local-browser.ts');
+const { verifyProductSizes } = require('../lib/browser.ts');
 const { ensureSnapshotTable, saveSnapshot } = require('../lib/browser-snapshots.ts');
 
 // 'registry' simulates the whole daily pipeline: every registered shop, with
@@ -46,9 +47,31 @@ const sources = ids.map(id => {
   return source;
 });
 
+// Listing cards rarely show which sizes are still available. For the few
+// offers that could become deals (relevant, >= 40 % with price evidence), open
+// the product page and record the selectable sizes, so the report can confirm
+// L / W33-34 or drop an offer whose remaining sizes are all incompatible.
+const SIZE_CHECKS_PER_SHOP = Number(process.env.SIZE_CHECKS_PER_SHOP || 6);
+function dealCandidate(o) {
+  if (!o.name || !productEligible(o.name, o.description) || o.sizeAvailability === 'available') return false;
+  const rrpPct = o.rrp && o.rrpSource && o.rrp > Number(o.price) ? (1 - Number(o.price) / o.rrp) * 100 : 0;
+  const badgePct = o.discountSource ? Number(o.observedDiscountPct) || 0 : 0;
+  return Math.max(rrpPct, badgePct) >= 40;
+}
+async function verifyDealSizes(offers, coverage) {
+  const candidates = offers.filter(dealCandidate).slice(0, SIZE_CHECKS_PER_SHOP);
+  let confirmed = 0;
+  for (const offer of candidates) {
+    const sizes = await verifyProductSizes(offer.url);
+    if (sizes) { offer.sizes = sizes; offer.sizeAvailability = 'available'; confirmed++; }
+  }
+  if (candidates.length) (coverage.technicalPath ||= []).push(`size-check-${confirmed}-of-${candidates.length}`);
+}
+
 async function measure(source, runtime) {
   if (runtime === 'local') process.env.BROWSER_RUNTIME = 'local'; else delete process.env.BROWSER_RUNTIME;
   const { offers, coverage } = await crawlSource(source);
+  if (runtime === 'local' && process.env.VERIFY_SIZES !== 'false') await verifyDealSizes(offers, coverage);
   const checked = await Promise.allSettled(offers.map(normalizeOfferChecked));
   const normalized = checked.filter(r => r.status === 'fulfilled' && r.value.offer).map(r => r.value.offer);
   const relevant = offers.filter(o => o.name && productEligible(o.name, o.description));

@@ -4,6 +4,7 @@ import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract'
 import { browserFallbackConfig } from './browser-config.mjs';
 import { reserveBrowserSession } from './browser-budget';
 import { newLocalContext } from './local-browser';
+import { normalizeSizeLabel } from './product-rules.mjs';
 import pLimit from 'p-limit';
 
 // A batch runs several shops concurrently. Keep its Browserless sessions serial
@@ -352,25 +353,61 @@ async function extractRenderedDomOffers(
   }
 }
 
+// Available (not disabled / sold-out) size labels on a product detail page.
+async function readAvailableSizes(page: import('playwright-core').Page): Promise<string[]> {
+  const selectors = [
+    '[data-testid*="size"] button', '[data-testid*="size"] label',
+    'button[name*="size"]', '[class*="size"] button', '[class*="size"] label', '[class*="size"] li',
+    '[class*="groesse"] button', '[class*="Groesse"] button', '[class*="variant"] button',
+    'input[name*="size"] + label', 'select[name*="size"] option', 'select[id*="size"] option',
+    'select[name*="groesse"] option', '[data-option-name*="size" i] label', '[data-option-name*="größe" i] label',
+  ].join(',');
+  const values = (await page.locator(selectors).evaluateAll(elements=>elements
+    .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out,[class*="unavailable"],[class*="soldout"],[class*="sold-out"]') &&
+      !(el instanceof HTMLOptionElement && el.disabled) &&
+      !(el instanceof HTMLButtonElement && el.disabled) &&
+      !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
+    .map(el=>(el.textContent||'').trim())))
+    .map(v => v.replace(/\s+/g, ' ').trim())
+    .filter(v => v.length <= 24 && (normalizeSizeLabel(v) !== 'unknown' ||
+      /^(?:W?\d{2,3}(?:\s*[/x]\s*L?\d{2})?|(?:EU|DE)\s*\d{2}|XXS|XS|S|M|L|XL|XXL|[2-5]XL)$/i.test(v)));
+  return [...new Set(values)].slice(0, 40);
+}
+
 async function enrichSingleOfferSizes(page: import('playwright-core').Page, offers: RawOffer[]) {
   if (offers.length !== 1 || !/\/products?\/|\/artikel\/|\/p\//i.test(page.url())) return offers;
   try {
-    const selectors = [
-      '[data-testid*="size"] button', '[data-testid*="size"] label',
-      'button[name*="size"]', '[class*="size"] button', '[class*="size"] label',
-      'input[name*="size"] + label', 'select[name*="size"] option',
-    ].join(',');
-    const values = (await page.locator(selectors).evaluateAll(elements=>elements
-      .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out') &&
-        !(el instanceof HTMLOptionElement && el.disabled) &&
-        !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
-      .map(el=>(el.textContent||'').trim())))
-      .map(v => v.replace(/\s+/g, ' ').trim())
-      .filter(v => /^(?:W?\d{2}(?:\s*\/\s*L?\d{2})?|(?:EU\s*)?\d{2}|XS|S|M|L|XL|XXL)$/i.test(v));
-    const unique = [...new Set(values)].slice(0, 30);
+    const unique = await readAvailableSizes(page);
     if (unique.length) { offers[0].sizes = unique; offers[0].sizeAvailability='available'; }
   } catch {}
   return offers;
+}
+
+/**
+ * Local Chromium only (GitHub Actions): open a deal candidate's product page and
+ * read which sizes are actually selectable. Returns null when the page could
+ * not be read, so callers keep the offer's size status unconfirmed.
+ */
+export async function verifyProductSizes(url: string, deadline = Date.now() + 25000): Promise<string[] | null> {
+  if (browserFallbackConfig().mode !== 'local-playwright') return null;
+  return localSessionLimit(async () => {
+    let context: import('playwright-core').BrowserContext | null = null;
+    try {
+      context = await newLocalContext();
+      const page = await context.newPage();
+      page.setDefaultTimeout(timeLeft(deadline, 5000));
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 15000) });
+      if (!response || response.status() >= 400) return null;
+      await dismissConsent(page);
+      await page.waitForTimeout(Math.min(2500, timeLeft(deadline, 2500)));
+      const sizes = await readAvailableSizes(page);
+      return sizes.length ? sizes : null;
+    } catch {
+      return null;
+    } finally {
+      try { if (context) await context.close(); } catch {}
+    }
+  });
 }
 
 // Shared page pipeline for remote (CDP) and local Chromium sessions.

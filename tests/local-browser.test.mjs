@@ -174,3 +174,28 @@ test('rendered cards use visually struck-through prices and discount badges as e
     process.env = saved;
   }
 });
+
+test('product-page size check returns only selectable sizes', { skip: !existsSync(chromium) && 'no local Chromium binary' }, async () => {
+  const page = `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>Keb Trousers M</h1>
+    <div class="size-selector"><button>46</button><button disabled>48</button><button>50</button>
+    <button class="sold-out">52</button><button>54</button></div>
+    <div class="variant-picker"><button>Schwarz</button></div></body></html>`;
+  const server = createServer((_, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(page); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const saved = { ...process.env };
+  process.env.BROWSER_RUNTIME = 'local';
+  delete process.env.VERCEL;
+  process.env.CHROMIUM_EXECUTABLE_PATH = chromium;
+  const { verifyProductSizes } = require('../lib/browser.ts');
+  const { closeLocalBrowser } = require('../lib/local-browser.ts');
+  const { sizeEvidence } = await import('../lib/product-rules.mjs');
+  try {
+    const sizes = await verifyProductSizes(`http://127.0.0.1:${server.address().port}/p/keb`);
+    assert.deepEqual(sizes, ['46', '50', '54']);
+    assert.equal(sizeEvidence(sizes), 'probable', 'German 50 is near the W34 target');
+  } finally {
+    await closeLocalBrowser();
+    server.close();
+    process.env = saved;
+  }
+});
