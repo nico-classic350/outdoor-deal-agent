@@ -18,7 +18,7 @@ This file is the compact source-of-truth handoff for AI development sessions (Cl
 - 92 registered shops (brand review 30 September 2026: Black Diamond and Adidas Terrex stores replaced by Fjällräven and Lundhags; Bergans and Klättermusen added; Trekkinn (USD for the US runner) and the closed Montura store removed)
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
-- 16 recovery crons in the 05:00 UTC hour rerun missing batches; retry finalizer in the 06:00 UTC hour and watchdog in the 07:00 UTC hour publish `agent_runs` only after all batches are present
+- 16 recovery crons in the 04:00 UTC hour rerun missing batches; the finalizer runs in the 05:00 UTC hour but defers until 07:00 Europe/Berlin (`lib/send-time.ts`), so in winter the retry finalizer in the 06:00 UTC hour sends the mail; watchdog in the 07:00 UTC hour; `agent_runs` is published only after all batches are present
 - `/api/health` is the production health and deployment-SHA source
 - `/api/probe` replays current filtering/scoring against the latest complete stored batch snapshot without crawling shops
 - Finalized reports include a delta against the previous finalized report, including per-shop status, raw extraction and useful-offer counts. Same-day reruns preserve the earlier report as their baseline. `/api/probe` previews this comparison read-only; snapshot-keyed notifications can send a corrected same-day report without duplicate messages on finalizer retries.

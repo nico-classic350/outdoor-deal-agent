@@ -31,9 +31,9 @@ Alle Cron-Zeiten in `vercel.json` sind **UTC**. In Deutschland im Sommer UTC+2, 
 | --- | --- |
 | 22:20 (Vortag) | GitHub Actions Chromium-Crawl der Browser-Kohorte, speichert Snapshots |
 | 00:00–03:00 | 16 Batch-Crons à maximal sechs Shops |
-| 04:00 | Finalisierung, sobald alle 16 Batches vorhanden sind |
-| 05:00–05:15 | 16 Einzel-Retries für fehlende Batches |
-| 06:00 | Finalisierung erneut versuchen |
+| 04:00–04:15 | 16 Einzel-Retries für fehlende Batches |
+| 05:00 | Finalisierung und E-Mail – nur ab 07:00 deutscher Zeit (Sommerzeit); im Winter wartet sie |
+| 06:00 | Finalisierung erneut versuchen; im Winter kommt die E-Mail hier (07:00 deutscher Zeit) |
 | 07:15; 10:00, 14:00, 20:00, 23:00 | Watchdog bzw. Recovery, auch für verspätete Läufe und E-Mail-Retries |
 
 Ein Lauf ist erst erfolgreich, wenn der vollständige Bericht gespeichert **und** die E-Mail vom Provider angenommen und ihre Message-ID in `agent_notification_snapshots` gespeichert wurde. Finalizer-Retries derselben Batch-Snapshot-ID senden keine zweite Nachricht. Ein erneuter Batch mit neuer Snapshot-ID kann eine ausdrücklich als „aktualisiert“ bezeichnete zweite Tagesmail auslösen; das ist eine getrennte korrigierte Ausgabe. Gmail SMTP kann nach einem Absturz unmittelbar nach Annahme, aber vor DB-Bestätigung in seltenen Fällen doppelt senden; Resend besitzt zusätzlich ein 24-Stunden-Idempotency-Fenster. Provider-Annahme garantiert noch keine Posteingangszustellung.

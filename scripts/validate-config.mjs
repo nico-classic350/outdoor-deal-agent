@@ -108,6 +108,9 @@ assert(JSON.stringify(batchCronIndexes)===JSON.stringify(expectedIndexes),`Verce
 const retryIndexes=crons.map(c=>String(c.path||'').match(/^\/api\/retry-batch\/(\d+)$/)).filter(Boolean).map(m=>Number(m[1])).sort((a,b)=>a-b);
 assert(JSON.stringify(retryIndexes)===JSON.stringify(expectedIndexes),`Vercel schedules exactly ${expectedBatches} recovery crons`);
 assert(crons.filter(c=>c.path==='/api/finalize').length===1,'exactly one finalizer cron exists');
+assert(crons.find(c=>c.path==='/api/finalize')?.schedule==='0 5 * * *','finalizer runs in the 05:00 UTC hour (07:00 Berlin in summer)');
+assert(crons.filter(c=>/^\/api\/retry-batch\//.test(String(c.path||''))).every(c=>/^\d{1,2} 4 /.test(c.schedule)),'batch recovery runs in the 04:00 UTC hour, before the finalizer');
+assert(read('app/api/finalize/route.ts').includes('berlinHour()')&&/Europe\/Berlin/.test(read('lib/send-time.ts')),'finalizer defers the mail until 07:00 Berlin time');
 assert(crons.filter(c=>c.path==='/api/finalize-retry').length===1,'exactly one finalizer retry cron exists');
 assert(crons.find(c=>c.path==='/api/finalize-retry')?.schedule==='0 6 * * *','finalizer retry runs after batch recovery window');
 assert(crons.filter(c=>c.path==='/api/watchdog').length===1,'one watchdog cron monitors delayed or missing daily work');
