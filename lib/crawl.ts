@@ -11,6 +11,8 @@ import { rankDiscoveryUrls } from './discovery.mjs';
 import robotsParser from 'robots-parser';
 import { browserStartUrls } from '../config/browser-cohort';
 import { SHOP_BRAND } from '../config/shops';
+import { SHOPIFY_SOURCES } from '../config/shopify-sources';
+import { ingestShopify } from './shopify';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
@@ -135,6 +137,22 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
   };
 
   try{
+    const shopify=SHOPIFY_SOURCES[source.id];
+    if(shopify){
+      technicalPath.push('shopify-json');
+      try{
+        const result=await ingestShopify(source,shopify,deadline);
+        httpStatuses.push(...result.statuses);
+        discovered=shopify.collections.map(handle=>`${shopify.origin}/collections/${handle}`);
+        if(result.offers.length){
+          offers.push(...result.offers);
+          technicalPath.push('shopify-json-success');
+          return {offers,coverage:coverage('success','Shopify collection JSON (compare-at price, available sizes)')};
+        }
+        technicalPath.push('shopify-json-empty');
+      }catch{ technicalPath.push('shopify-json-error'); }
+    }
+
     if(source.id==='globetrotter'){
       technicalPath.push('official-affiliate-feed');
       try{
