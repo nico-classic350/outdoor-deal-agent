@@ -14,7 +14,8 @@
 | --- | --- | --- |
 | Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 91 EU-Quellen, Marken und Auswahlprofil |
 | Erfassung | `lib/crawl.ts`, `lib/targeted.ts`, `lib/feed.ts`, `lib/globetrotter-feed.ts` | Direkte Listings, offizielle zugängliche Feeds, Sitemaps, HTML/JSON-LD |
-| Browser-Fallback | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless REST und CDP-Playwright nur bei Bedarf; Tageslimit für Sitzungsversuche |
+| Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 22:20 UTC Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
+| Browser-Fallback (optional) | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless nur noch opt-in (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0) |
 | Normalisierung und Auswahl | `lib/normalize.ts`, `lib/product-rules.mjs`, `lib/publication-safety.mjs` | Preisbeleg, Marke/Kategorie, Größenstatus, modellübergreifende Dublettenprüfung |
 | Speicherung | `lib/batch-run.ts`, `lib/store.ts` | `agent_batch_runs`, `agent_runs` in Neon |
 | E-Mail | `lib/notify.ts`, `lib/gmail-smtp.mjs`, `lib/email-template.ts` | Genau ein Anbieterpfad: Gmail bei gesetztem `GMAIL_SMTP_USER`, sonst Resend; Bilder, Deals, Zusammenfassung und alle Shops |
@@ -28,6 +29,7 @@ Alle Cron-Zeiten in `vercel.json` sind **UTC**. In Deutschland im Sommer UTC+2, 
 
 | UTC-Zeit | Zweck |
 | --- | --- |
+| 22:20 (Vortag) | GitHub Actions Chromium-Crawl der Browser-Kohorte, speichert Snapshots |
 | 00:00–03:00 | 16 Batch-Crons à maximal sechs Shops |
 | 04:00 | Finalisierung, sobald alle 16 Batches vorhanden sind |
 | 05:00–05:15 | 16 Einzel-Retries für fehlende Batches |
@@ -48,7 +50,7 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 | `DEAL_NOTIFY_TO`, `GMAIL_SMTP_USER`, `GMAIL_SMTP_APP_PASSWORD` | Aktiver Gmail-Versand an die bestätigte Zieladresse (identisch mit Absender) |
 | `RESEND_API_KEY`, `DEAL_NOTIFY_FROM` | Alternative nur ohne `GMAIL_SMTP_USER`, mit verifizierter Domain |
 | `BROWSERLESS_API_TOKEN` oder `BROWSERLESS_TOKEN`, `BROWSERLESS_BASE_URL` | Browserless Cloud; Amsterdam-Default `https://production-ams.browserless.io` |
-| `BROWSERLESS_DAILY_SESSION_LIMIT` | Standard 24 Provider-Sitzungsversuche je UTC-Tag über alle Batches; kein exakter Browserless-Unitzähler |
+| `BROWSERLESS_DAILY_SESSION_LIMIT` | Standard 0 (kein Browserless); ein positiver Wert erlaubt so viele Provider-Sitzungsversuche je UTC-Tag über alle Batches; kein exakter Browserless-Unitzähler |
 | `OPENAI_API_KEY`, `LLM_EXTRACTION_MODE`, `LLM_EXTRACTION_SHOPS`, `LLM_EXTRACTION_MODEL` | Optionaler LLM-Pilot, zurzeit `shadow`; dieser publiziert keine zusätzlichen Angebote |
 
 `playwright-core` nutzt `connectOverCDP()` am WebSocket-Root `wss://production-ams.browserless.io?token=…`. Der Pfad `/chromium/playwright` gehört zur anderen Playwright-`connect()`-Methode. Das Browserless-Token niemals in Logs, PRs oder Dokumente kopieren. Ein vorhandener Cloud-Token hat Vorrang vor der veralteten `BROWSERLESS_CONTENT_URL`.
@@ -62,6 +64,8 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 - Vercel Runtime Logs konnten wegen `ExceedsBillingLimitError` nur eingeschränkt eingesehen werden; die obigen Browserless-Zahlen stammen aus den gespeicherten Batch-Coverage-Daten von `/api/batch-status`. Nach dem Deployment meldete `/api/health` ausdrücklich `browserProviderStatus=auth-rejected`, 72 betroffene Shops und null wiedergewonnene Shops.
 
 **Befund Claude-Übernahme (30. September, Nachmittag):** Die gespeicherte Coverage zeigt ausschließlich HTTP 401 – sowohl `/content` als auch `/unblock`, in jeder Batch-Invocation beim ersten echten Aufruf; alle übrigen Shops wurden korrekt über den Auth-Circuit übersprungen (kein Budget-, 429- oder Playwright-Fehler). Beide REST-Endpunkte übergeben den Token wie von Browserless dokumentiert als `?token=`. Das spricht für eine Ablehnung auf Kontoebene, nicht für einen Endpunkt- oder Regionsfehler. Laut Nutzer ist das Browserless-Freikontingent (1.000 Units/Monat, 1 Unit ≤ 30 s Browserzeit) erschöpft; Free-Pläne weisen danach alle Anfragen ab. Das erklärt die 401 auch bei gültigem Token. Weitere mögliche Ursachen: gewechselter/widerrufener Key oder mitkopierte Leer-/Anführungszeichen. Bis zu einer Entscheidung über den Browser-Pfad `BROWSERLESS_DAILY_SESSION_LIMIT=0` in Vercel Production setzen. Seit PR „Browserless credential check“ wird der Token vor Verwendung von Leerraum und umschließenden Anführungszeichen bereinigt; `/api/health` zeigt `browserTokenIssue` (nur die Art des Problems, nie den Wert). `/api/browser-check` rendert einmalig `example.com` über `/content` – höchstens ein Provider-Aufruf je Token und UTC-Tag, maximal drei pro Tag, zusätzlich aus dem gemeinsamen Session-Budget; weitere Aufrufe liefern das gespeicherte Ergebnis. Erfolg ist ausschließlich `outcome=accepted` mit HTTP 200 und gerendertem Dokument; danach meldet Health `browserProviderStatus=check-accepted`, bis ein Batch tatsächlich Produkte über Browserless gewinnt (`recovered-products`).
+
+**Umstellung ohne Browserless (PR „Chromium browser crawl“):** Rendering läuft nun in GitHub Actions mit `playwright-core` und lokal installiertem Chromium. Einmalig erforderlich: (1) GitHub → Settings → Secrets and variables → Actions → Secret `BROWSER_SNAPSHOT_DATABASE_URL` anlegen (Neon-Verbindung, idealerweise eigene Rolle nur für `agent_browser_snapshots`). (2) In Vercel Production `BROWSERLESS_DAILY_SESSION_LIMIT` entfernen oder auf `0` setzen; `BROWSERLESS_API_TOKEN` kann gelöscht werden. (3) Den Workflow manuell mit `shops=pilot`, `compare=true` starten und das A/B-Ergebnis prüfen, bevor man sich auf den nächtlichen Lauf verlässt. Geplante GitHub-Workflows können sich verspäten und werden nach 60 Tagen ohne Repository-Aktivität deaktiviert; die Batches laufen dann ohne Browserdaten weiter.
 
 **Offener Betriebsfehler:** In Browserless einen gültigen API-Token und den Accountstatus prüfen, `BROWSERLESS_API_TOKEN` in Vercel Production kontrollieren, neue Production-Deployment-Version auslösen. Dann `/api/browser-check` einmal aufrufen (kostet höchstens eine Browserless-Sitzung) oder einen kleinen schreibfreien `pnpm smoke:browser`-Test mit lokal bereitgestelltem Token oder den nächsten begrenzten Produktionsbatch auswerten. Erfolg ist an tatsächlichem HTTP 200/Browser-Extraktion erkennbar, nicht am Konfigurationsflag. Bis dahin erzeugt der direkte Crawl weiterhin den täglichen Bericht und die E-Mail.
 

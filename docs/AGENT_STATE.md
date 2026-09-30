@@ -39,13 +39,14 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 1. official feed/API where available
 2. targeted retailer parsers
 3. generic feed/sitemap/direct HTTP + JSON-LD/HTML
-4. Browserless `/content` for JS-rendered pages
-5. Browserless `/unblock` for 403/429
-6. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
+4. GitHub Actions Chromium snapshot (nightly `browser-crawl.yml`, `agent_browser_snapshots`, merged by the batches when younger than 30 h)
+5. Browserless `/content` for JS-rendered pages (opt-in; `BROWSERLESS_DAILY_SESSION_LIMIT` defaults to 0)
+6. Browserless `/unblock` for 403/429
+7. Browserless remote Playwright (`playwright-core`, CDP) for difficult rendered/interactive pages
 
 Awin advertiser access was declined. Its runtime adapter, health route, key and setup guide were removed. Historical coverage may still contain `awin-check`; these entries are immutable evidence of old runs.
 
-No local Chromium or full Playwright browser binaries are bundled.
+No local Chromium or full Playwright browser binaries are bundled into Vercel. Only the GitHub Actions job launches Chromium (`BROWSER_RUNTIME=local`, never active when `VERCEL` is set).
 
 ## Results and notification
 
@@ -62,7 +63,7 @@ Never commit values. Supported names:
 - `BROWSERLESS_UNBLOCK=false` to disable unblock
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
 - optional `BROWSERLESS_PROXY`
-- `BROWSERLESS_DAILY_SESSION_LIMIT` (default 24 session admissions per UTC day across all batches; `0` disables paid escalation). A database-backed atomic counter gates REST attempts and CDP connections, including retries. This is not a precise Browserless billed-unit meter; inspect the account's actual unit usage.
+- `BROWSERLESS_DAILY_SESSION_LIMIT` (default 0 = no paid escalation; a positive value admits that many sessions per UTC day across all batches). A database-backed atomic counter gates REST attempts and CDP connections, including retries. This is not a precise Browserless billed-unit meter; inspect the account's actual unit usage.
 
 Optional bounded LLM extraction pilot (off unless enabled):
 

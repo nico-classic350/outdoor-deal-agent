@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, matchesGlob } from 'node:path';
 
 const root=process.cwd(); const errors=[]; const ok=[];
@@ -46,6 +46,22 @@ assert(packageJson.dependencies?.['playwright-core'],'remote browser automation 
 assert(!packageJson.dependencies?.playwright,'full Playwright browser package is not bundled');
 assert(browserSource.includes('connectOverCDP'),'Browserless Playwright uses remote CDP');
 assert(!browserSource.includes('chromium.launch('),'browser code never launches local Chromium');
+const localBrowser=read('lib/local-browser.ts');
+assert(localBrowser.includes('chromium.launch(')&&localBrowser.includes('localBrowserEnabled()'),'local Chromium is launched only by the gated GitHub Actions runtime');
+assert(/localBrowserRuntime[\s\S]*BROWSER_RUNTIME === 'local' && !env\.VERCEL/.test(browserConfig),'local Chromium runtime can never activate on Vercel');
+for(const file of readdirSync(full('app'),{recursive:true}).map(String).filter(f=>/\.tsx?$/.test(f))){
+  assert(!read(join('app',file)).includes('local-browser'),`app route ${file} does not import the local Chromium runtime`);
+}
+const browserWorkflow=read('.github/workflows/browser-crawl.yml');
+assert(/permissions:\s*\n\s*contents: read/.test(browserWorkflow),'browser crawl workflow has read-only repository permissions');
+assert(!/pull_request/.test(browserWorkflow),'browser crawl workflow never runs on pull requests (secrets stay out of fork code)');
+assert(browserWorkflow.includes('secrets.BROWSER_SNAPSHOT_DATABASE_URL')&&!browserWorkflow.includes('secrets.DATABASE_URL'),'browser crawl uses only the dedicated snapshot database secret');
+const browserCrawl=read('scripts/actions-browser-crawl.mjs');
+assert(browserCrawl.includes("'DATABASE_URL'")&&browserCrawl.includes("'BROWSERLESS_API_TOKEN'"),'browser crawl removes production database and Browserless credentials');
+assert(!/agent_batch_runs|agent_runs|sendRunNotification|finalizeBatches/.test(browserCrawl+read('lib/browser-snapshots.ts')),'browser crawl never writes batches, reports or mail');
+assert(read('lib/batch-run.ts').includes('mergeSnapshot'),'Vercel batches merge fresh Chromium snapshots');
+{ const cohort=read('config/browser-cohort.ts'); const known=new Set([...read('config/shops.ts').matchAll(/^([a-z0-9-]+)\|/gm)].map(m=>m[1]));
+  for(const id of [...cohort.matchAll(/'([a-z0-9-]+)'/g)].map(m=>m[1]).filter(x=>!['all','pilot','render','blocked','local'].includes(x))) assert(known.has(id),`browser cohort shop ${id} exists in the registry`); }
 assert(browserSource.includes('browserWSEndpoint'),'blocked-page flow supports Browserless session handoff');
 assert(/BROWSERLESS_API_TOKEN/.test(browserConfig)&&/BROWSERLESS_TOKEN/.test(browserConfig),'Browserless token is read only from environment');
 const browserCheck=read('lib/browser-check.ts');

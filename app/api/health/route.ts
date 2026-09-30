@@ -72,6 +72,7 @@ export async function GET() {
     let batchRowsToday = 0;
     let browserProviderAuthRejectedSources = 0;
     let browserRecoveredSources = 0;
+    let actionsBrowserRecoveredSources = 0;
     let latestFinalizedAt: string | null = null;
     let latestFinalizedRunDate: string | null = null;
     let emailDeliveryStatus = 'no-report-today';
@@ -90,6 +91,7 @@ export async function GET() {
         for (const source of Array.isArray(batch.coverage) ? batch.coverage : []) {
           if (source.technicalPath?.includes('browser-provider-auth-rejected')) browserProviderAuthRejectedSources++;
           if (source.technicalPath?.includes('browser-success')) browserRecoveredSources++;
+          if (source.technicalPath?.includes('actions-browser-success')) actionsBrowserRecoveredSources++;
         }
       }
     }
@@ -128,6 +130,19 @@ export async function GET() {
     }
 
     const browserProviderCheck = browser.configured ? await latestBrowserCheck() : null;
+    // GitHub Actions Chromium crawler: fresh snapshots and their contribution today.
+    const snapshotTable = await sql`SELECT to_regclass('public.agent_browser_snapshots') AS t`;
+    const actionsBrowser = { freshSnapshots: 0, snapshotsWithOffers: 0, latestCollectedAt: null as string | null,
+      shopsWithAddedOffers: actionsBrowserRecoveredSources };
+    if (snapshotTable[0]?.t) {
+      const rows = await sql`SELECT count(*)::int AS n,
+          count(*) FILTER (WHERE jsonb_array_length(offers) > 0)::int AS with_offers,
+          max(collected_at) AS latest
+        FROM agent_browser_snapshots WHERE collected_at >= now() - interval '30 hours'`;
+      actionsBrowser.freshSnapshots = Number(rows[0]?.n || 0);
+      actionsBrowser.snapshotsWithOffers = Number(rows[0]?.with_offers || 0);
+      actionsBrowser.latestCollectedAt = rows[0]?.latest ? new Date(rows[0].latest).toISOString() : null;
+    }
     const batchesComplete = batchRowsToday === BATCH_COUNT;
     const finalizedToday = latestFinalizedRunDate === runDate;
     const pipelineComplete = batchesComplete && finalizedToday && emailDeliveryStatus === 'sent';
@@ -153,6 +168,7 @@ export async function GET() {
           : browserProviderCheck?.outcome === 'auth-rejected' || browserProviderAuthRejectedSources ? 'auth-rejected'
           : 'configured-no-recovery',
         browserProviderCheck,
+        actionsBrowser,
         browserProviderAuthRejectedSources,
         browserRecoveredSources,
         batchesComplete,

@@ -11,6 +11,7 @@ import { sendRunNotification } from './notify';
 import { diagnoseCoverage } from './diagnose';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
 import { fillVerifiedShipping } from './shipping';
+import { loadFreshSnapshots, mergeSnapshot, BrowserSnapshot } from './browser-snapshots';
 
 export const BATCH_SIZE = 6;
 export const BATCH_COUNT = Math.ceil(SHOPS.length / BATCH_SIZE);
@@ -55,7 +56,14 @@ export async function runBatch(batchIndex: number) {
   const limit = pLimit(BATCH_CONCURRENCY);
   console.info(`[batch] start date=${runDate} batch=${batchIndex} sources=${sources.length}`);
 
-  const results = await Promise.all(sources.map((source) => limit(() => crawlSource(source))));
+  // Chromium snapshots from the GitHub Actions crawler are optional input.
+  let snapshots = new Map<string, BrowserSnapshot>();
+  try { snapshots = await loadFreshSnapshots(sqlClient(), sources.map(source => source.id)); }
+  catch { console.warn(`[batch] browser-snapshots-unavailable date=${runDate} batch=${batchIndex}`); }
+  const results = await Promise.all(sources.map((source) => limit(async () =>
+    mergeSnapshot(await crawlSource(source), snapshots.get(source.id)))));
+  const snapshotOffers = results.reduce((sum, r) => sum + r.added, 0);
+  if (snapshots.size) console.info(`[batch] browser-snapshots date=${runDate} batch=${batchIndex} shops=${snapshots.size} addedOffers=${snapshotOffers}`);
   const raw = results.flatMap((r) => r.offers);
   const shippingVerified = await fillVerifiedShipping(raw);
   if (shippingVerified) results.find(r => r.coverage.sourceId === 'bergfreunde')?.coverage.technicalPath?.push('merchant-shipping-policy-verified');

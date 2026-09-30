@@ -1,0 +1,74 @@
+name: Chromium browser crawl
+
+# Open-source replacement for Browserless: Playwright (playwright-core) drives a
+# Chromium installed on the GitHub-hosted runner (free for public repositories).
+# The nightly run stores snapshots that the Vercel batches (00:00–03:00 UTC)
+# merge. It never writes batch/report rows and never sends mail.
+on:
+  schedule:
+    - cron: '20 22 * * *'
+  workflow_dispatch:
+    inputs:
+      shops:
+        description: 'all | render | blocked | pilot | comma-separated shop IDs'
+        required: false
+        default: 'pilot'
+      compare:
+        description: 'Also run the same shops direct-only (A/B in one run)'
+        type: boolean
+        default: true
+      write_snapshot:
+        description: 'Store Chromium results for the next Vercel batches'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chromium-browser-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve playwright-core version
+        id: pw
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Chromium
+        id: chromium-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright-core install --with-deps chromium
+      - name: Install Chromium system dependencies
+        if: steps.chromium-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright-core install-deps chromium
+      - name: Crawl browser cohort with local Chromium
+        env:
+          ACTIONS_BROWSER_SHOPS: ${{ github.event_name == 'schedule' && 'all' || inputs.shops }}
+          AB_COMPARE: ${{ github.event_name == 'schedule' && 'false' || inputs.compare }}
+          WRITE_SNAPSHOT: ${{ github.event_name == 'schedule' && 'true' || inputs.write_snapshot }}
+          BROWSER_SNAPSHOT_DATABASE_URL: ${{ secrets.BROWSER_SNAPSHOT_DATABASE_URL }}
+        run: node scripts/actions-browser-crawl.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chromium-browser-crawl-${{ github.run_id }}
+          path: observability/actions-browser-summary.json
+          if-no-files-found: warn
+          retention-days: 14
