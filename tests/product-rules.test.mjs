@@ -174,4 +174,8 @@ test('women abbreviations, casual/warm styles and foreign trouser words are clas
   assert.equal(productEligible('Pantalone trekking uomo Salewa Puez'), true);
   assert.equal(productEligible('Pantaloni donna Salewa'), false);
   assert.equal(productEligible('Haglöfs Mid Standard Pant Men'), true);
+  for (const name of ['50% Houdini Wadi Pants Freizeithose', 'bis 56% Patagonia Synch Pants Fleecehose', '45% Peak Performance Trail Tech Pants Radhose',
+    '40% Patagonia Nomader Joggers Freizeithose', 'bis 50% Rab Torque Mountain Pants Tourenhose']) assert.equal(productEligible(name), false, name);
+  assert.equal(productEligible('50% Dynafit Transalper DST Pants Trekkinghose'), true);
+  assert.equal(productEligible('Mountain Equipment - Sella Pant - Softshellhose - Goblin Blue'), true);
 });
