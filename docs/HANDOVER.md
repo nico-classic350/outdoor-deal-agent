@@ -12,7 +12,7 @@
 
 | Schritt | Code/Ort | Ergebnis |
 | --- | --- | --- |
-| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 92 EU-Quellen, Premium-Markenliste und Auswahlprofil |
+| Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 93 Quellen (92 EU-Shops + mydealz), Premium-Markenliste und Auswahlprofil |
 | Erfassung | `lib/crawl.ts`, `lib/targeted.ts`, `lib/feed.ts`, `lib/globetrotter-feed.ts` | Direkte Listings, offizielle zugängliche Feeds, Sitemaps, HTML/JSON-LD |
 | Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 22:20 UTC Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
 | Browser-Fallback (optional) | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless nur noch opt-in (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0) |
@@ -74,6 +74,8 @@ Die Schlüsselnamen stehen in `.env.example`. Produktionswerte liegen ausschlie�
 **Deal-Ausbeute (30. September, abends):** Bericht und E-Mail listen jetzt **alle** qualifizierten Deals (nach Score sortiert, kompakte Zeilen gegen Gmail-Kürzung), nicht mehr nur die Top 5. Neue Belegquellen: Shopify-`compare_at_price` (DF Sport, SportIT direkt auf Vercel, ohne Browser), ausdrücklich beschriftete Referenzpreise (UVP, statt, Listino, RRP) und optisch durchgestrichene Preise; ein unbeschrifteter höherer Preis zählt nie. Für mögliche Deals öffnet der Actions-Lauf die Produktseite und liest nur wählbare Größen (max. 6 je Shop). Neu im Chromium-Lauf: Tapir, SportScheck, Sportano, Bottero, Bever, VerticalExtreme. Publisher-/Affiliate-Anmeldungen werden vorerst nicht verfolgt.
 
 **Weitere Shop-Schnittstellen (30. September, spät):** Sport Förg läuft über Shopify-JSON (118 relevante Hosen, 59 mit Referenzpreis), Snowcountry und Maxisport über die öffentliche Magento-Schnittstelle (`config/commerce-sources.ts`; Maxisport antwortet dem US-Runner mit 503). Findet ein Shop relevante Produkte ohne Streichpreis, öffnet der nächtliche Actions-Lauf zusätzlich dessen Sale-/Outlet-Seiten (Engelhorn, Sportokay, Sport Conrad, Gigasport u. a.). Die Diagnose (`diagnose=true`, `shops=registry`) prüft jetzt auch Shopify-, WooCommerce- und Magento-Schnittstellen aller Shops.
+
+**mydealz (30. September, abends):** Neue Quelle `mydealz` liest die RSS-Feeds der Community (öffentliche Gruppe *Outdoor* und – falls gesetzt – den persönlichen Schlagwort-Alarm-Feed aus `MYDEALZ_ALERT_FEED_URL`). So kommen auch Deals aus Shops an, deren Seiten automatische Besuche sperren (Globetrotter, Decathlon, Sport Bittl …). Referenzpreis zählt nur, wenn der Beitrag ihn beschriftet (PVG/VGP = nächstbester Preis, UVP, statt); Größen aus Angaben wie „Gr. S – XL“. Beiträge älter als 10 Tage oder „abgelaufen“ werden ignoriert. Der Link zeigt auf den mydealz-Beitrag. `MYDEALZ_ALERT_FEED_URL` ist wie ein Passwort zu behandeln: in Vercel (Production) und als GitHub-Secret gleichen Namens eintragen, nie ins Repository. Die Quelle läuft auch im nächtlichen Actions-Lauf (Snapshot), falls Vercel von mydealz abgewiesen wird. idealo/Check24 haben keine öffentliche Schnittstelle und verbieten automatisches Abrufen – nicht angebunden.
 
 ## Übernahme und Prüfung
 

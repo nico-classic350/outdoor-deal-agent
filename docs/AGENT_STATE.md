@@ -39,7 +39,7 @@ This file is the compact source-of-truth handoff for AI development sessions (Cl
 
 ## Acquisition order
 
-1. official feed/API where available, including Shopify collection JSON (`config/shopify-sources.ts`, verified euro stores) and WooCommerce Store API / Magento GraphQL (`config/commerce-sources.ts`); in the nightly Actions run, shops whose relevant products lack price evidence also render their configured sale/outlet start pages
+1. official feed/API where available, including Shopify collection JSON (`config/shopify-sources.ts`, verified euro stores) and WooCommerce Store API / Magento GraphQL (`config/commerce-sources.ts`); mydealz RSS (`lib/mydealz.ts`: public group feed plus optional `MYDEALZ_ALERT_FEED_URL`, set in Vercel and as GitHub secret; labelled PVG/UVP/statt only); in the nightly Actions run, shops whose relevant products lack price evidence also render their configured sale/outlet start pages
 2. targeted retailer parsers
 3. generic feed/sitemap/direct HTTP + JSON-LD/HTML
 4. GitHub Actions Chromium snapshot (nightly `browser-crawl.yml`, `agent_browser_snapshots`, merged by the batches when younger than 30 h)
