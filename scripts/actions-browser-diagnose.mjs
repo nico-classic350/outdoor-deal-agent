@@ -83,6 +83,11 @@ async function inspect(url) {
         productLikeElements: document.querySelectorAll('[class*="product" i], [data-product-id], [data-testid*="product" i], article').length,
         jsonLdTypes: [...new Set(jsonLdTypes)].slice(0, 12),
         consentVisible: consent,
+        platform: (window.Shopify || document.querySelector('meta[name="shopify-checkout-api-token"], link[href*="cdn.shopify.com"]')) ? 'shopify'
+          : (document.querySelector('[class*="cms-element"], [data-cms-element-id], script[src*="/bundles/storefront/"]') ? 'shopware6'
+          : (document.querySelector('.product--box, [class*="product--info"]') ? 'shopware5'
+          : (window.require && document.querySelector('script[type="text/x-magento-init"]') ? 'magento'
+          : (document.querySelector('meta[name="generator"][content*="WooCommerce"], body.woocommerce') ? 'woocommerce' : null)))),
         blockedHint: /access denied|captcha|are you a robot|verify you are human|cloudflare|forbidden/i.test(text.slice(0, 3000)),
         categoryLinks,
         saleLinks: [...new Map(links.filter(l => /sale|outlet|reduziert|angebot|deals|special|clearance/i.test(l.href + ' ' + l.text) && !W.test(l.href + ' ' + l.text)).map(l => [l.href, l])).values()].slice(0, 12),
@@ -148,7 +153,8 @@ const extractAt = async (source, url) => {
 const compactPage = p => ({ requested: p.requested, finalUrl: p.finalUrl, httpStatus: p.httpStatus, title: p.title, error: p.error,
   currencies: p.currencies, consentVisible: p.consentVisible, blockedHint: p.blockedHint, euroSnippets: (p.euroSnippets || []).slice(0, 3),
   categoryLinks: (p.categoryLinks || []).slice(0, 8).map(l => l.href), saleLinks: (p.saleLinks || []).slice(0, 8).map(l => l.href),
-  localeLinks: (p.localeLinks || []).slice(0, 6).map(l => l.href), firstCardPrices: p.cardSamples?.[0]?.priceNodes?.slice(0, 5) ?? [] });
+  localeLinks: (p.localeLinks || []).slice(0, 6).map(l => l.href), firstCardPrices: p.cardSamples?.[0]?.priceNodes?.slice(0, 5) ?? [],
+  platform: p.platform ?? null, firstCard: p.cardSamples?.[0] ? { tag: p.cardSamples[0].tag, cls: p.cardSamples[0].cls, html: p.cardSamples[0].html } : null });
 const menTrousers = href => TROUSERS.test(href) && MEN.test(href) && !WOMEN.test(href);
 for (const id of browserCohort(selection)) {
   const source = SHOPS.find(shop => shop.id === id);
@@ -165,7 +171,18 @@ for (const id of browserCohort(selection)) {
   ].filter(u => u && !u.includes('#') && !tried.has(u) && tried.add(u)).slice(0, 4);
   const extracted = [];
   for (const url of targets) extracted.push(await extractAt(source, url));
-  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted };
+  // Shopify stores expose collection JSON with compare_at_price and variant availability.
+  let shopifyProbe = null;
+  if (pages.some(p => p.platform === 'shopify')) {
+    const origin = new URL(pages[0].finalUrl || source.baseUrl).origin;
+    try {
+      const r = await fetch(`${origin}/products.json?limit=5`, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)' }, signal: AbortSignal.timeout(10000) });
+      const j = r.ok ? await r.json() : null;
+      shopifyProbe = { status: r.status, products: j?.products?.length ?? 0,
+        sample: j?.products?.[0] ? { title: j.products[0].title, variants: j.products[0].variants?.slice(0, 3).map(v => ({ title: v.title, price: v.price, compare_at_price: v.compare_at_price, available: v.available })) } : null };
+    } catch (e) { shopifyProbe = { error: String(e?.message || e).slice(0, 80) }; }
+  }
+  const entry = { shop: id, baseUrl: source.baseUrl, pages: pages.map(compactPage), extracted, shopifyProbe };
   report.push(entry);
   console.log(`[diagnose] ${JSON.stringify(entry)}`);
 }
