@@ -156,3 +156,7 @@ via direct/merchant paths. Browserless was configured but recovered zero shops:
 rejection, including HTTP 401 from `/unblock` and `/content`. The revised
 health response exposes this distinction. Restoring the credential and
 re-running a bounded pilot remains an open operation, not a completed test.
+All recorded provider failures were HTTP 401 on the first real REST call of
+each invocation (`/content` and `/unblock` alike); the circuit prevented
+further calls. A bounded `/api/browser-check` now provides a one-request
+credential verification before the next batch window.

@@ -73,6 +73,7 @@ This creates a single trace from code diff -> CI/preflight -> Vercel deployment 
 - Sitemap links are restricted to the shop domain and HTML crawling respects robots.txt.
 - Mammut men's hiking-trouser category uses a targeted HTML parser. Its server-rendered product cards are extracted without requiring Browserless; a repeated screen-reader price is read once and does not become an MSRP.
 - `/api/health` verifies database reachability, daily pipeline completeness and browser-fallback configuration without exposing credentials. It also reports Browserless authentication failures observed in today's batches; a configured token alone does not prove it is accepted.
+- `/api/browser-check` verifies the deployed Browserless token with one example.com render per token and UTC day (max three provider calls per day, shared session budget, no shop crawl, no writes to batches/reports, no mail). Health reports its result as `browserProviderCheck` and a non-secret `browserTokenIssue` when the stored token needed whitespace/quote cleanup.
 - Read-only status endpoints use short CDN caching where appropriate.
 
 ## Browserless fallback

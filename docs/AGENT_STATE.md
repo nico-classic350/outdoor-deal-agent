@@ -78,7 +78,7 @@ For a read-only five-shop Browserless smoke test, set the token in the local she
 
 Health exposes only non-secret configuration state.
 
-As of 30 September 2026, the production batches recorded Browserless HTTP 401 and zero recovered products despite the token being configured. `/api/health` now exposes `browserProviderStatus` and counts of auth-rejected sources. The token must be corrected in Vercel Production and a new deployment created before a subsequent batch can establish recovery.
+As of 30 September 2026, the production batches recorded Browserless HTTP 401 and zero recovered products despite the token being configured. `/api/health` now exposes `browserProviderStatus` and counts of auth-rejected sources. The token must be corrected in Vercel Production and a new deployment created before a subsequent batch can establish recovery. Tokens are now trimmed of whitespace/wrapping quotes (`browserTokenIssue` in health names the kind of issue, never the value). `GET /api/browser-check` performs one bounded `/content` render of example.com per deployed token and UTC day (max three per day, counted in the shared session budget) and stores the outcome in `agent_browser_provider_checks`; `browserProviderStatus=check-accepted` means the provider accepted the current token, `recovered-products` means a batch actually gained products.
 
 Two legacy ChatGPT automations that independently sent the same daily report were paused on 30 September 2026. The app's Gmail SMTP notification and Vercel watchdog remain the sole active report pipeline. See `docs/HANDOVER.md` for status, operations, and the current open issue.
 

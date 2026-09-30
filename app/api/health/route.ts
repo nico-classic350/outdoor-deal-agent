@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { BATCH_COUNT } from '../../../lib/batch-run';
 import { SHOPS } from '../../../config/shops';
 import { browserFallbackConfig } from '../../../lib/browser-config.mjs';
+import { latestBrowserCheck } from '../../../lib/browser-check';
 import { DEFAULT_LLM_EXTRACTION_MODEL } from '../../../lib/llm-extract';
 import { screenForPublication } from '../../../lib/publication-safety.mjs';
 import { PROFILE } from '../../../config/profile';
@@ -33,6 +34,7 @@ export async function GET() {
     browserFallbackRegion: browser.baseUrl ? new URL(browser.baseUrl).hostname : null,
     browserUnblockEnabled: browser.useUnblock,
     browserPlaywrightEnabled: browser.usePlaywright,
+    browserTokenIssue: browser.tokenIssue ?? null,
     llmExtraction: {
       mode: llmMode,
       shops: llmShops,
@@ -125,6 +127,7 @@ export async function GET() {
       }
     }
 
+    const browserProviderCheck = browser.configured ? await latestBrowserCheck() : null;
     const batchesComplete = batchRowsToday === BATCH_COUNT;
     const finalizedToday = latestFinalizedRunDate === runDate;
     const pipelineComplete = batchesComplete && finalizedToday && emailDeliveryStatus === 'sent';
@@ -142,7 +145,14 @@ export async function GET() {
         batchTablePresent,
         runTablePresent,
         batchRowsToday,
-        browserProviderStatus: !browser.configured ? 'disabled' : browserProviderAuthRejectedSources ? 'auth-rejected' : browserRecoveredSources ? 'recovered-products' : 'configured-no-recovery',
+        // A /api/browser-check result belongs to the currently deployed token and
+        // is therefore newer evidence than batch coverage from an earlier token.
+        browserProviderStatus: !browser.configured ? 'disabled'
+          : browserRecoveredSources ? 'recovered-products'
+          : browserProviderCheck?.outcome === 'accepted' ? 'check-accepted'
+          : browserProviderCheck?.outcome === 'auth-rejected' || browserProviderAuthRejectedSources ? 'auth-rejected'
+          : 'configured-no-recovery',
+        browserProviderCheck,
         browserProviderAuthRejectedSources,
         browserRecoveredSources,
         batchesComplete,

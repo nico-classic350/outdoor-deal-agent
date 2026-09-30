@@ -48,6 +48,9 @@ assert(browserSource.includes('connectOverCDP'),'Browserless Playwright uses rem
 assert(!browserSource.includes('chromium.launch('),'browser code never launches local Chromium');
 assert(browserSource.includes('browserWSEndpoint'),'blocked-page flow supports Browserless session handoff');
 assert(/BROWSERLESS_API_TOKEN/.test(browserConfig)&&/BROWSERLESS_TOKEN/.test(browserConfig),'Browserless token is read only from environment');
+const browserCheck=read('lib/browser-check.ts');
+assert(browserCheck.includes('MAX_CHECKS_PER_DAY')&&browserCheck.includes('reserveBrowserSession')&&browserCheck.includes('database-required-for-cost-cap'),'Browserless credential check is capped per day and uses the shared session budget');
+assert(!/console\.(log|error)\([^)]*(contentUrl|token)/.test(browserCheck+read('app/api/browser-check/route.ts')),'Browserless credential check never logs token-bearing values');
 assert(agentState.includes('Starting a fresh ChatGPT chat'),'durable project handoff documents fresh-chat recovery');
 
 assert(/pull_request:/.test(ciWorkflow)&&/branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates pull requests to main');
