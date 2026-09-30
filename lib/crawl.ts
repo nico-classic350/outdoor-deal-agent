@@ -14,7 +14,7 @@ import { SHOP_BRAND } from '../config/shops';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
-const BRAND_TERMS=PROFILE.brands.map(x=>x.toLowerCase().replace('adidas terrex','terrex'));
+const BRAND_TERMS=PROFILE.brands.flatMap(x=>[x.toLowerCase(),x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ø/g,'o')]);
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));

@@ -10,14 +10,14 @@ const {crawlSource}=require('../lib/crawl.ts');
 test('a direct product without reference price does not spend a browser session',async()=>{
   const oldFetch=globalThis.fetch, oldToken=process.env.BROWSERLESS_API_TOKEN;
   process.env.BROWSERLESS_API_TOKEN='test-token';
-  const product='https://shop.example/stoic-softshellhose-light/';
+  const product='https://shop.example/lundhags-softshellhose-light/';
   const requests=[];
   globalThis.fetch=async url=>{
     const u=String(url);requests.push(u);
     if(u.endsWith('/robots.txt')) return {ok:false,status:404};
     if(u.endsWith('/sitemap.xml')) return {ok:true,status:200,text:async()=>`<loc>${product}</loc>`};
     if(u.endsWith('/sitemap_index.xml')) return {ok:false,status:404};
-    if(u===product) return {ok:true,status:200,text:async()=>`<script type="application/ld+json">{"@type":"Product","name":"Stoic Softshellhose Light","brand":{"name":"Stoic"},"offers":{"price":"79.95","priceCurrency":"EUR"}}</script>`};
+    if(u===product) return {ok:true,status:200,text:async()=>`<script type="application/ld+json">{"@type":"Product","name":"Lundhags Softshellhose Light","brand":{"name":"Lundhags"},"offers":{"price":"79.95","priceCurrency":"EUR"}}</script>`};
     throw new Error(`unexpected request ${u}`);
   };
   try{

@@ -1,6 +1,10 @@
 export const PROFILE = {
-  brands: ["Arc'teryx","Odlo","Dynafit","Ortovox","La Sportiva","Mammut","Norrøna","Rab","Patagonia","Haglöfs","Black Diamond","Peak Performance","Houdini","Adidas Terrex","66°North","Goldwin","Tilak","Stoic"],
-  excludedBrands: ['The North Face'],
+  // Premium only: brands with a proven record for technical fabrics and build
+  // quality in trekking/hiking trousers. Reviewed 30 September 2026; house and
+  // mass-market labels (Stoic, Adidas Terrex) and hardware-first brands
+  // (Black Diamond) were removed.
+  brands: ["Arc'teryx","Norrøna","Haglöfs","Fjällräven","Klättermusen","Bergans","Lundhags","Mammut","Ortovox","Dynafit","La Sportiva","Patagonia","Rab","Mountain Equipment","Montura","Houdini","Peak Performance","66°North","Goldwin","Tilak","Odlo"],
+  excludedBrands: ['The North Face','Stoic','Adidas Terrex'],
   waist: [33,34],
   inseamMax: 32,
   upperSize: 'L',

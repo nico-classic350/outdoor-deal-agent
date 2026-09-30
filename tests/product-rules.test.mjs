@@ -60,16 +60,16 @@ test('same product URL is one candidate despite card titles and tracking paramet
 });
 
 test('one model occupies one deal slot across colours, sizes and affiliate links', () => {
-  const base={sourceId:'bergfreunde',brand:'Stoic',name:'Stoic - HoforsSt. Softshell Pants Light - Softshellhose - Night Blue | L - Regular',
-    color:'Night Blue',url:'https://www.bergfreunde.de/stoic-hoforsst-softshell-pants-light-softshellhose/?aid=blue&amp;',
+  const base={sourceId:'bergfreunde',brand:'Lundhags',name:'Lundhags - HoforsSt. Softshell Pants Light - Softshellhose - Night Blue | L - Regular',
+    color:'Night Blue',url:'https://www.bergfreunde.de/lundhags-hoforsst-softshell-pants-light-softshellhose/?aid=blue&amp;',
     sizeFit:'confirmed',shippingKnown:true,discountVerified:true,effectiveDiscountPct:57,effectiveCostEur:71.93,
     productFitScore:80,score:85};
-  const olive={...base,name:'Stoic - HoforsSt. Softshell Pants Light - Softshellhose - Olive | L - Regular',
+  const olive={...base,name:'Lundhags - HoforsSt. Softshell Pants Light - Softshellhose - Olive | L - Regular',
     color:'Olive',url:base.url.replace('blue','olive'),score:83};
   const smaller={...base,name:base.name.replace('L - Regular','M - Regular'),url:base.url.replace('blue','medium'),
     sizeFit:'unconfirmed',score:65};
-  const other={...base,name:'Stoic - VittangiSt. Softshell Pants - Softshellhose - Black | L',color:'Black',
-    url:'https://www.bergfreunde.de/stoic-vittangist-softshell-pants/?aid=other',score:82};
+  const other={...base,name:'Lundhags - VittangiSt. Softshell Pants - Softshellhose - Black | L',color:'Black',
+    url:'https://www.bergfreunde.de/lundhags-vittangist-softshell-pants/?aid=other',score:82};
   const result=selectOffers([olive,smaller,other,base]);
   assert.deepEqual(result.deals.map(o=>o.name),[base.name,other.name]);
   assert.equal(result.qualifiedCount,2);
@@ -99,7 +99,7 @@ test('sixth qualifying deal is not relabeled as a near miss', () => {
 });
 
 test('uncertain sizes qualify while only the five highest ranked appear as deals', () => {
-  const offers=Array.from({length:8},(_,i)=>({sourceId:'x',brand:'Stoic',name:'Herren Wanderhose',
+  const offers=Array.from({length:8},(_,i)=>({sourceId:'x',brand:'Lundhags',name:'Herren Wanderhose',
     url:`https://example.org/p/${i}`,sizeFit:'unconfirmed',shippingKnown:false,discountVerified:true,
     effectiveDiscountPct:58,effectiveCostEur:65,productFitScore:80,score:80-i}));
   const result=selectOffers(offers);
@@ -120,7 +120,7 @@ test('a cheaper unverified variant does not hide a verified variant at the same 
 });
 
 test('merchant-displayed discount can qualify without inventing an RRP', () => {
-  const base={sourceId:'bergfreunde',brand:'Stoic',name:'Hoforsst Softshell Pants Light',url:'https://example.org/stoic-hose',
+  const base={sourceId:'bergfreunde',brand:'Lundhags',name:'Hoforsst Softshell Pants Light',url:'https://example.org/lundhags-hose',
     sizeFit:'confirmed',shippingKnown:true,rrpVerified:false,discountVerified:true,observedDiscountPct:60,
     effectiveDiscountPct:60,effectiveCostEur:67.98,productFitScore:80,score:80};
   const result=selectOffers([base]);

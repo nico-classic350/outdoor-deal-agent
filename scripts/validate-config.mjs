@@ -67,7 +67,8 @@ assert(/BROWSERLESS_API_TOKEN/.test(browserConfig)&&/BROWSERLESS_TOKEN/.test(bro
 const browserCheck=read('lib/browser-check.ts');
 assert(browserCheck.includes('MAX_CHECKS_PER_DAY')&&browserCheck.includes('reserveBrowserSession')&&browserCheck.includes('database-required-for-cost-cap'),'Browserless credential check is capped per day and uses the shared session budget');
 assert(!/console\.(log|error)\([^)]*(contentUrl|token)/.test(browserCheck+read('app/api/browser-check/route.ts')),'Browserless credential check never logs token-bearing values');
-assert(agentState.includes('Starting a fresh ChatGPT chat'),'durable project handoff documents fresh-chat recovery');
+assert(agentState.includes('Starting a fresh Claude Code session'),'durable project handoff documents fresh-session recovery');
+assert(existsSync(full('CLAUDE.md'))&&read('CLAUDE.md').includes('@AGENTS.md'),'CLAUDE.md loads the repository agent workflow');
 
 assert(/pull_request:/.test(ciWorkflow)&&/branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates pull requests to main');
 assert(/push:[\s\S]*branches:\s*\[main\]/.test(ciWorkflow),'GitHub CI validates main');
@@ -89,7 +90,7 @@ const malformedShopLines=shopLines.filter(line=>{
   const parts=line.split('|');
   return parts.length!==5 || !/^[A-Z]{2}$/.test(parts[2]) || !/^https?:\/\//.test(parts[3]) || !/^[123]$/.test(parts[4]);
 });
-assert(shopLines.length===91,`shop registry contains expected 91 sources (found ${shopLines.length})`);
+assert(shopLines.length===94,`shop registry contains expected 94 sources (found ${shopLines.length})`);
 assert(malformedShopLines.length===0,`shop registry rows are structurally valid (invalid ${malformedShopLines.length})`);
 const duplicateIds=shopLines.map(line=>line.split('|')[0]).filter((id,index,all)=>all.indexOf(id)!==index);
 assert(duplicateIds.length===0,'shop registry IDs are unique');

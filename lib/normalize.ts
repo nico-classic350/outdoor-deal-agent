@@ -7,13 +7,15 @@ import { dealScore, dealClass } from './score';
 import { productEligible } from './product-rules.mjs';
 
 function brandOf(o:RawOffer){
-  const clean=(v:string)=>v.toLowerCase().replace(/[’']/g,"'").trim();
+  // Fold diacritics so "Fjallraven", "Haglofs" and "Norrona" match the profile.
+  const clean=(v:string)=>v.toLowerCase().replace(/[’']/g,"'").normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ø/g,'o').replace(/æ/g,'ae').trim();
   const known=PROFILE.brands.find(b=>clean(o.brand||'')===clean(b));
   if(known) return known;
   const title=clean(o.name||'');
   return PROFILE.brands.find(b=>{
-    const term=clean(b).replace('adidas terrex','terrex').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    return new RegExp(`(?:^|[^a-zà-ž])${term}(?=$|[^a-zà-ž])`,'i').test(title);
+    const term=clean(b).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return new RegExp(`(?:^|[^a-z0-9])${term}(?=$|[^a-z0-9])`,'i').test(title);
   })||'';
 }
 export type RejectionReason = 'brand-not-allowed'|'name-missing'|'currency-missing'|'price-missing'|'discount-unverified'|'product-mismatch'|

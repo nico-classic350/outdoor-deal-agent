@@ -77,10 +77,10 @@ patagonia-eu|Patagonia EU|NL|https://eu.patagonia.com|1
 rab-eu|Rab EU|NL|https://rab.equipment/eu|1
 norrona-eu|Norrøna EU|SE|https://www.norrona.com|1
 haglofs-eu|Haglöfs EU|SE|https://www.haglofs.com|1
-blackdiamond-eu|Black Diamond EU|AT|https://www.blackdiamondequipment.com|1
+fjallraven-eu|Fjällräven EU|SE|https://www.fjallraven.com|1
 peakperformance-eu|Peak Performance EU|SE|https://www.peakperformance.com|1
 houdini-eu|Houdini EU|SE|https://houdinisportswear.com|1
-adidas-terrex-de|Adidas Terrex DE|DE|https://www.adidas.de/terrex|1
+lundhags-eu|Lundhags EU|SE|https://www.lundhags.com|1
 goldwin-eu|Goldwin Europe|DE|https://www.goldwin-global.com/eu|2
 tilak-eu|Tilak EU|CZ|https://www.tilak.com|2
 66north-eu|66°North EU|DK|https://www.66north.com|2
@@ -90,7 +90,10 @@ feinbier|Feinbier unterwegs|DE|https://www.feinbier-unterwegs.de|2
 biwakschachtel|Biwakschachtel Tübingen|DE|https://www.biwakschachtel-tuebingen.de|2
 carl-denig|Carl Denig|NL|https://www.carldenig.nl|2
 glisshop|Glisshop|FR|https://www.glisshop.com|2
-outnorth|Outnorth|SE|https://www.outnorth.com|2`;
+outnorth|Outnorth|SE|https://www.outnorth.com|2
+bergans-eu|Bergans EU|NO|https://www.bergans.com|1
+klattermusen-eu|Klättermusen EU|SE|https://www.klattermusen.com|1
+montura-eu|Montura EU|IT|https://www.montura.com|2`;
 
 export const SHOPS: ShopSource[] = DATA.split('\n').map((line) => {
   const [id, name, country, baseUrl, priority] = line.split('|');
@@ -102,7 +105,8 @@ export const SHOPS: ShopSource[] = DATA.split('\n').map((line) => {
 export const SHOP_BRAND: Record<string, string> = {
   'arcteryx-eu': "Arc'teryx", 'odlo-eu': 'Odlo', 'dynafit-eu': 'Dynafit', 'ortovox-eu': 'Ortovox',
   'lasportiva-eu': 'La Sportiva', 'mammut-eu': 'Mammut', 'patagonia-eu': 'Patagonia', 'rab-eu': 'Rab',
-  'norrona-eu': 'Norrøna', 'haglofs-eu': 'Haglöfs', 'blackdiamond-eu': 'Black Diamond',
-  'peakperformance-eu': 'Peak Performance', 'houdini-eu': 'Houdini', 'adidas-terrex-de': 'Adidas Terrex',
+  'norrona-eu': 'Norrøna', 'haglofs-eu': 'Haglöfs', 'fjallraven-eu': 'Fjällräven', 'lundhags-eu': 'Lundhags',
+  'peakperformance-eu': 'Peak Performance', 'houdini-eu': 'Houdini', 'bergans-eu': 'Bergans',
+  'klattermusen-eu': 'Klättermusen', 'montura-eu': 'Montura',
   'goldwin-eu': 'Goldwin', 'tilak-eu': 'Tilak', '66north-eu': '66°North',
 };

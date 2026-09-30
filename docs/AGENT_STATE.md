@@ -1,6 +1,6 @@
 # Outdoor Deal Agent — durable handoff
 
-This file is the compact source-of-truth handoff for future ChatGPT development sessions. It exists so development is not dependent on one long chat history.
+This file is the compact source-of-truth handoff for AI development sessions (Claude Code since 30 September 2026; previously ChatGPT/Codex). It exists so development is not dependent on one long chat history. `CLAUDE.md` loads `AGENTS.md` and points here.
 
 ## Production
 
@@ -11,11 +11,11 @@ This file is the compact source-of-truth handoff for future ChatGPT development 
 - Database: Neon PostgreSQL
 - CI: GitHub Actions `CI & Change Observability`
 - `git.deploymentEnabled` uses `**: false` for non-main branches (including branches with `/`) and `main: true` for production. The old `*: false` rule did not cover slashed branches. Vercel may retain historical failed-preview records; future feature pushes should create no preview deployment.
-- The connected GitHub app is the write path in short-lived Codex workspaces. Shell Git fetch works without credentials, but shell Git push may fail; do not try to persist a personal access token in the project or workspace. Create/update branches and PRs through the GitHub app, then fetch the remote branch locally. A personal terminal may use its own credential helper.
+- Write path: in Claude Code cloud sessions, `git push` to the session's designated branch works through the session's git proxy; the connected GitHub app (MCP) is the alternative for branches, PRs, workflow dispatch and logs. Never persist a personal access token in the project or workspace.
 
 ## Daily pipeline
 
-- 91 registered shops
+- 94 registered shops (brand review 30 September 2026: Black Diamond and Adidas Terrex stores replaced by Fjällräven and Lundhags; Bergans, Klättermusen, Montura added)
 - batch size 6, expected batches 16
 - batches persist to `agent_batch_runs`
 - 16 recovery crons in the 05:00 UTC hour rerun missing batches; retry finalizer in the 06:00 UTC hour and watchdog in the 07:00 UTC hour publish `agent_runs` only after all batches are present
@@ -58,7 +58,7 @@ No local Chromium or full Playwright browser binaries are bundled into Vercel. O
 
 Never commit values. Supported names:
 
-- `BROWSERLESS_API_TOKEN` (preferred) or `BROWSERLESS_TOKEN`
+- `BROWSERLESS_API_TOKEN` (preferred) or `BROWSERLESS_TOKEN` — optional; removed from Vercel Production on 30 September 2026, rendering runs in GitHub Actions
 - `BROWSERLESS_BASE_URL` (defaults to Amsterdam shared cloud)
 - `BROWSERLESS_UNBLOCK=false` to disable unblock
 - `BROWSERLESS_PLAYWRIGHT=false` to disable remote Playwright
@@ -95,8 +95,8 @@ For code changes:
 6. production-observability verifies the exact merged SHA, `/api/health`, registry and `/api/probe`
 7. inspect stored GitHub workflow artifacts/logs on any failure before changing code again
 
-## Starting a fresh ChatGPT chat
+## Starting a fresh Claude Code session
 
-Ask the assistant to read `docs/AGENT_STATE.md`, then check current `main`, the latest GitHub CI run, Vercel deployment and `/api/health` before making changes. This is preferred over continuing an oversized historical chat.
+Claude Code reads `CLAUDE.md` (which includes `AGENTS.md`) automatically. Ask it to read `docs/AGENT_STATE.md`, then check current `main`, open PRs, the latest GitHub CI run, the Vercel deployment and `/api/health` before making changes. A fresh session is preferred over continuing an oversized historical one. The browser path can be inspected without local shop access via *Actions → Chromium browser crawl* with `diagnose=true` (read-only).
 
 Update this file whenever architecture, deployment flow, core selection rules or required environment variables change. Do not put credentials, tokens or personal data here.

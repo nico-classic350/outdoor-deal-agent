@@ -11,11 +11,13 @@ export const BROWSER_COHORT = {
     'aboutyou-de', 'bestsecret', 'odlo-eu', 'patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
     'peakperformance-eu', 'goldwin-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
+    // Premium brand stores added with the September 2026 brand review.
+    'fjallraven-eu', 'lundhags-eu', 'bergans-eu', 'klattermusen-eu', 'montura-eu',
   ],
   blocked: [
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
     'ekosport', 'vieux-campeur', '8a', 'e-horyzont', 'sportler', 'oliunid', 'nencini', 'galeria',
-    'ortovox-eu', 'lasportiva-eu', 'adidas-terrex-de',
+    'ortovox-eu', 'lasportiva-eu',
   ],
   // Small fixed cohort for A/B measurements (direct-only vs. direct + Chromium).
   pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'peakperformance-eu', 'trekkinn', 'outdoor-renner'],

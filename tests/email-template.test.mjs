@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { renderRunEmail } from '../lib/email-template.ts';
 
 test('daily mail includes product thumbnail, deal details and full coverage even when there are deals', () => {
-  const offer = { brand: 'Stoic', name: 'Softshellhose L', merchant: 'Bergfreunde',
+  const offer = { brand: 'Lundhags', name: 'Softshellhose L', merchant: 'Bergfreunde',
     imageUrl: 'https://img.example/hose.jpg', url: 'https://shop.example/hose',
     effectiveCostEur: 71.93, priceEur: 69.95, rrpEur: 169.95, effectiveDiscountPct: 57.6,
     sizeFit: 'confirmed', sizes: ['L'], shippingKnown: true, shippingEur: 1.98,
