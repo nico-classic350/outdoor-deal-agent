@@ -224,6 +224,25 @@ for (const id of diagnoseIds) {
 }
 await closeLocalBrowser();
 
+// Deal-community feeds (read-only): shows whether the runner may read them and
+// how their items look. Public feeds only; a personal alert feed is read from
+// the environment when set and its URL is never printed.
+if (process.env.ACTIONS_DIAGNOSE_FEEDS === 'true') {
+  const feeds = [['mydealz-hot', 'https://www.mydealz.de/rss/hot'], ['mydealz-fashion', 'https://www.mydealz.de/rss/gruppe/fashion-accessories'],
+    ['mydealz-outdoor', 'https://www.mydealz.de/rss/gruppe/outdoor']];
+  if (process.env.MYDEALZ_ALERT_FEED_URL) feeds.push(['mydealz-alerts', process.env.MYDEALZ_ALERT_FEED_URL]);
+  for (const [label, url] of feeds) {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)', accept: 'application/rss+xml, application/xml' }, signal: AbortSignal.timeout(15000) });
+      const text = await r.text();
+      const items = text.match(/<item[\s>][\s\S]*?<\/item>/g) || [];
+      console.log(`[feed] ${JSON.stringify({ label, status: r.status, type: r.headers.get('content-type'), items: items.length,
+        head: items.length ? undefined : text.slice(0, 300), first: label === 'mydealz-alerts' ? undefined : items.slice(0, 2).map(i => i.slice(0, 2500)),
+        titles: items.slice(0, 8).map(i => (i.match(/<title>([\s\S]*?)<\/title>/) || [])[1]?.slice(0, 120)) })}`);
+    } catch (e) { console.log(`[feed] ${JSON.stringify({ label, error: String(e?.message || e).slice(0, 80) })}`); }
+  }
+}
+
 mkdirSync('observability', { recursive: true });
 writeFileSync('observability/actions-browser-diagnose.json', JSON.stringify(report, null, 2) + '\n');
 if (process.env.GITHUB_STEP_SUMMARY) {
