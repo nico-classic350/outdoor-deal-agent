@@ -21,10 +21,13 @@ import { enrichFromDetailPages, DETAIL_ENRICH_LIMIT } from './detail-enrich';
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
 const BRAND_TERMS=PROFILE.brands.flatMap(x=>[x.toLowerCase(),x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ø/g,'o')]);
-const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
-const DETAIL_BUDGET_MS = Math.max(5000, Math.min(40000, Number(process.env.DETAIL_BUDGET_MS || 30000)));
-const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
-const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
+// Vercel keeps the defaults (300 s per batch of six shops); the nightly Actions
+// run raises them because it has no function time limit.
+const SOURCE_BUDGET_MS = Math.max(20000, Math.min(300000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
+const DETAIL_BUDGET_MS = Math.max(5000, Math.min(600000, Number(process.env.DETAIL_BUDGET_MS || 60000)));
+const LISTING_PAGE_LIMIT = Math.max(1, Math.min(50, Number(process.env.LISTING_PAGE_LIMIT || 20)));
+const GENERIC_URL_LIMIT = Math.max(8, Math.min(100, Number(process.env.GENERIC_URL_LIMIT || 20)));
+const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(6, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
 const LLM_DIRECT_SHADOW_SHOPS = new Set(['4camping', 'rab-eu', 'peakperformance-eu']);
 
@@ -251,7 +254,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
           const x=extractTargetedListing(html,source,url);
           if(x.length) technicalPath.push('listing-card-extraction');
           offers.push(...x);
-          if(expandedDiscovery && x.length>=8 && extraPages<6){
+          if(expandedDiscovery && x.length>=8 && extraPages<LISTING_PAGE_LIMIT){
             const next=nextListingPage(html,url);
             if(next && !visited.has(next) && !discovered.includes(next)){
               queue.push(next);discovered.push(next);extraPages++;

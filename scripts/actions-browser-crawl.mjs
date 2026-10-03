@@ -18,8 +18,13 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 // No paid providers in this job, and no production batch/mail side effects.
 for (const key of ['BROWSERLESS_API_TOKEN', 'BROWSERLESS_TOKEN', 'BROWSERLESS_CONTENT_URL', 'OPENAI_API_KEY', 'DATABASE_URL']) delete process.env[key];
 process.env.LLM_EXTRACTION_MODE = 'off';
-process.env.SOURCE_BUDGET_MS ||= '90000';
-process.env.BROWSER_FALLBACK_URL_LIMIT ||= '3';
+process.env.SOURCE_BUDGET_MS ||= '180000';
+// No function time limit here: read every listing page, tile and premium
+// trouser product page (Vercel keeps its tighter defaults).
+process.env.DETAIL_BUDGET_MS ||= '300000';
+process.env.GENERIC_URL_LIMIT ||= '60';
+process.env.LISTING_PAGE_LIMIT ||= '30';
+process.env.BROWSER_FALLBACK_URL_LIMIT ||= '4';
 
 const snapshotDb = process.env.BROWSER_SNAPSHOT_DATABASE_URL || '';
 const writeSnapshot = process.env.WRITE_SNAPSHOT === 'true';
@@ -34,6 +39,9 @@ const { normalizeOfferChecked } = require('../lib/normalize.ts');
 const { productEligible, selectOffers } = require('../lib/product-rules.mjs');
 const { closeLocalBrowser } = require('../lib/local-browser.ts');
 const { verifyProductSizes } = require('../lib/browser.ts');
+const { PROFILE } = require('../config/profile.ts');
+const foldBrand = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ø/g, 'o');
+const premiumBrand = o => PROFILE.brands.some(b => foldBrand(`${o.brand || ''} ${o.name || ''}`).includes(foldBrand(b)));
 const { ensureSnapshotTable, saveSnapshot } = require('../lib/browser-snapshots.ts');
 
 // 'registry' simulates the whole daily pipeline: every registered shop, with
@@ -51,7 +59,7 @@ const sources = ids.map(id => {
 // offers that could become deals (relevant, >= 40 % with price evidence), open
 // the product page and record the selectable sizes, so the report can confirm
 // L / W33-34 or drop an offer whose remaining sizes are all incompatible.
-const SIZE_CHECKS_PER_SHOP = Number(process.env.SIZE_CHECKS_PER_SHOP || 6);
+const SIZE_CHECKS_PER_SHOP = Number(process.env.SIZE_CHECKS_PER_SHOP || Infinity);
 function dealCandidate(o) {
   if (!o.name || !productEligible(o.name, o.description) || o.sizeAvailability === 'available') return false;
   const rrpPct = o.rrp && o.rrpSource && o.rrp > Number(o.price) ? (1 - Number(o.price) / o.rrp) * 100 : 0;
@@ -102,12 +110,21 @@ async function measure(source, runtime) {
 // Runtime is process-global (env), so the two arms run one after the other,
 // each over the whole cohort with bounded shop concurrency.
 async function runArm(runtime) {
-  const limit = pLimit(Number(process.env.SHOP_CONCURRENCY || 3));
-  return Promise.all(sources.map(source => limit(async () => {
-    const result = await measure(source, runtime === 'local' && (selection !== 'registry' || cohort.has(source.id)) ? 'local' : 'direct');
-    console.log(`[${runtime}] ${JSON.stringify({ shop: source.id, ...result.metrics, browserSteps: result.metrics.browserSteps.slice(0, 12) })}`);
-    return { shop: source.id, ...result };
-  })));
+  // BROWSER_RUNTIME is process-global: shops that need Chromium and shops that
+  // must run direct are processed in separate phases, never concurrently.
+  const phases = runtime === 'local' && selection === 'registry'
+    ? [['local', sources.filter(s => cohort.has(s.id))], ['direct', sources.filter(s => !cohort.has(s.id))]]
+    : [[runtime, sources]];
+  const rows = [];
+  for (const [mode, group] of phases) {
+    const limit = pLimit(Number(process.env.SHOP_CONCURRENCY || 3));
+    rows.push(...await Promise.all(group.map(source => limit(async () => {
+      const result = await measure(source, mode);
+      console.log(`[${runtime}] ${JSON.stringify({ shop: source.id, ...result.metrics, browserSteps: result.metrics.browserSteps.slice(0, 12) })}`);
+      return { shop: source.id, ...result };
+    }))));
+  }
+  return rows;
 }
 
 const direct = compare ? await runArm('direct') : null;
@@ -126,12 +143,16 @@ if (writeSnapshot) {
 }
 let stored = 0;
 if (sql) {
-  for (const row of local.filter(r => cohort.has(r.shop))) {
-    // Store every attempt (also empty ones) so health shows the job ran.
+  for (const row of local) {
+    // Browser shops: every attempt (also empty ones) so health shows the job
+    // ran. Other shops: only their premium trousers, which carry the product
+    // page checks (sizes, reference price, stock) into the Vercel batches.
+    const premium = row.offers.filter(o => o.name && productEligible(o.name, o.description) && premiumBrand(o));
+    if (!cohort.has(row.shop) && !premium.length) continue;
     await saveSnapshot(sql, {
       shopId: row.shop,
       collectedAt,
-      offers: row.offers,
+      offers: cohort.has(row.shop) ? row.offers : premium,
       coverage: {
         status: row.coverage.status, parsedOffers: row.coverage.parsedOffers, httpStatuses: row.coverage.httpStatuses,
         technicalPath: row.coverage.technicalPath, elapsedMs: row.coverage.elapsedMs,

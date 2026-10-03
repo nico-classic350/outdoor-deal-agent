@@ -252,3 +252,22 @@ test('size check reads Shopware configurator and Magento swatches, skipping unav
     process.env = saved;
   }
 });
+
+test('nightly product-page checks carry sizes, reference and stock into the same Vercel offer', () => {
+  const { mergeSnapshot } = require('../lib/browser-snapshots.ts');
+  const coverage = { sourceId: 'bergfreunde', name: 'Bergfreunde', status: 'success', discoveredUrls: 1, parsedOffers: 2, elapsedMs: 1, technicalPath: [] };
+  const live = [
+    { sourceId: 'bergfreunde', url: 'https://www.bergfreunde.de/a/', name: 'Bergans Rabot Pants', price: 70, sizes: [] },
+    { sourceId: 'bergfreunde', url: 'https://www.bergfreunde.de/b/', name: 'Mammut Runbold Pants', price: 80, sizes: [] },
+  ];
+  const snapshot = { shopId: 'bergfreunde', collectedAt: new Date().toISOString(), coverage: {}, offers: [
+    { sourceId: 'bergfreunde', url: 'https://www.bergfreunde.de/a/', price: 70, sizes: ['L'], sizeAvailability: 'available', rrp: 140, rrpSource: 'detail:x' },
+    { sourceId: 'bergfreunde', url: 'https://www.bergfreunde.de/b/', price: 95, sizes: ['L'], sizeAvailability: 'available' },
+  ] };
+  const merged = mergeSnapshot({ offers: live, coverage }, snapshot);
+  assert.deepEqual(merged.offers[0].sizes, ['L']);
+  assert.equal(merged.offers[0].rrp, 140);
+  assert.deepEqual(merged.offers[1].sizes, [], 'a different price is a different variant');
+  assert.equal(merged.added, 0);
+  assert.ok(merged.coverage.technicalPath.includes('actions-snapshot-enriched-1'));
+});
