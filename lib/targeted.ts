@@ -223,7 +223,7 @@ export function extractTargetedListing(html:string, source:ShopSource, pageUrl:s
     });
   });
 
-  return out.slice(0,80);
+  return out;
 }
 
 // Follow only an explicitly linked next page of the same listing. Never guess

@@ -270,7 +270,7 @@ async function stabilizeRenderedPage(page: import('playwright-core').Page, deadl
   }
 
   const morePattern = /mehr laden|mehr anzeigen|weitere anzeigen|load more|show more|voir plus|afficher plus|carica altro|mostra altro|mostrar más|ver más/i;
-  for (let i = 0; i < 2; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     if (timeLeft(deadline, 3000) < 2000) break;
     try {
       const control = page.locator('button, a').filter({ hasText: morePattern }).first();
@@ -289,7 +289,7 @@ async function extractRenderedDomOffers(
   try {
     // Shop-specific card rules (config/browser-cohort.ts) win over the generic selectors.
     const rule: BrowserCardRule | null = BROWSER_CARD_RULES[source.id] || null;
-    const rows = await page.locator(rule?.card || PRODUCT_SELECTOR).evaluateAll((elements, rule) => elements.slice(0, 120).map((element) => {
+    const rows = await page.locator(rule?.card || PRODUCT_SELECTOR).evaluateAll((elements, rule) => elements.slice(0, 400).map((element) => {
       const el = element as HTMLElement;
       const pick = (selector: string | undefined, fallback: string) => el.querySelector(selector || fallback) as HTMLElement | null;
       const anchor = (el.matches('a[href]') ? el : el.querySelector('a[href]')) as HTMLAnchorElement | null;
@@ -468,12 +468,12 @@ async function renderAndExtract(
   }
   const steps: string[] = [];
   if (!offers.length) {
-    // No product cards matched: follow a few same-shop links that name trousers
+    // No product cards matched: follow every same-shop link that names trousers (time-bounded)
     // and read the product pages, whose JSON-LD is far more uniform than cards.
     const links = await productLinkCandidates(page, url);
     if (links.length) steps.push(`product-links-${links.length}`);
     let loaded = 0, structured = 0;
-    for (const link of links.slice(0, PRODUCT_LINK_LIMIT)) {
+    for (const link of links) {
       if (deadline - Date.now() < 8000) break;
       try {
         const response = await page.goto(link, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 12000) });
@@ -500,7 +500,6 @@ async function renderAndExtract(
   };
 }
 
-const PRODUCT_LINK_LIMIT = 5;
 const PRODUCT_LINK_WORDS = /(hose|pants?|trousers?|bukser|byxor|housut|kalhoty|broek|pantalon)/i;
 const PRODUCT_LINK_EXCLUDE = /(damen|women|womens|dame|naiset|damske|dámské|kids|kinder|shorts|tights|leggings)/i;
 

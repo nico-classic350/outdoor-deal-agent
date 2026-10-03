@@ -3,14 +3,16 @@ import { extractJsonLd, extractHtmlFallback } from './extract';
 import { productEligible } from './product-rules.mjs';
 import { PROFILE } from '../config/profile';
 
-// Listing pages rarely show sizes and often omit the crossed-out price. For a
-// bounded number of premium trousers the product page is read once: its
+// Listing pages rarely show sizes and often omit the crossed-out price. Every
+// premium trouser's product page is read once (bounded by time, not count): its
 // JSON-LD lists each variant with size, stock and (often) the reference price.
 // Only variants at the listing price count, so a size that is buyable at a
 // different price never confirms the deal.
-export const DETAIL_ENRICH_LIMIT = Math.max(0, Math.min(30, Number(process.env.DETAIL_ENRICH_LIMIT ?? 20)));
-// Offers without any price evidence rarely gain one; keep most pages for deals.
-const NO_EVIDENCE_LIMIT = 6;
+// No count limit by default; 0 switches the step off. The time budget
+// (DETAIL_BUDGET_MS in crawl.ts) decides how many pages fit into one run.
+const limitEnv = Number(process.env.DETAIL_ENRICH_LIMIT ?? Infinity);
+export const DETAIL_ENRICH_LIMIT = Number.isFinite(limitEnv) ? Math.max(0, limitEnv) : Infinity;
+const DETAIL_CONCURRENCY = Math.max(1, Math.min(10, Number(process.env.DETAIL_CONCURRENCY || 6)));
 
 export type DetailFetch = (url: string) => Promise<string | null>;
 
@@ -31,10 +33,12 @@ export function detailCandidates(offers: RawOffer[], limit = DETAIL_ENRICH_LIMIT
   const seen = new Set<string>();
   const eligible = offers.filter(o => o.url && o.name && productEligible(o.name, o.description) && isPremium(o)
     && !/out.of.stock|sold.out|ausverkauft/i.test(o.availability || ''));
-  // Deals first (evidence but no sizes), then trousers lacking any price evidence.
+  // Deals first (evidence but no sizes), then trousers lacking any price
+  // evidence, then the rest (stock check), so a tight budget serves deals.
   const ranked = [
     ...eligible.filter(o => hasEvidence(o) && !(o.sizes || []).length),
-    ...eligible.filter(o => !hasEvidence(o)).slice(0, NO_EVIDENCE_LIMIT),
+    ...eligible.filter(o => !hasEvidence(o)),
+    ...eligible.filter(o => hasEvidence(o) && (o.sizes || []).length),
   ];
   const out: RawOffer[] = [];
   for (const o of ranked) {
@@ -85,6 +89,6 @@ export async function enrichFromDetailPages(source: ShopSource, offers: RawOffer
       stats.sizes += Number(r.sizes); stats.evidence += Number(r.evidence); stats.soldOut += Number(r.soldOut);
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, worker));
   return stats;
 }

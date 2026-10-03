@@ -111,7 +111,7 @@ export function extractHtmlFallback(html:string, source:ShopSource, pageUrl:stri
     '[class*="product-tile"]', '[class*="productTile"]', '[class*="product-item"]', '[class*="productItem"]',
     '[data-testid*="product"]', '[data-product-id]', '[data-product-sku]'
   ].join(',') );
-  cards.slice(0,120).each((_,el)=>{
+  cards.slice(0,400).each((_,el)=>{
     const card=$(el);
     const a=card.find('[data-e2e-test="product-card-info-name-section"]').closest('a[href]').first().length
       ? card.find('[data-e2e-test="product-card-info-name-section"]').closest('a[href]').first()

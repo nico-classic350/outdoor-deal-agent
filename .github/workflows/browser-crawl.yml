@@ -76,7 +76,9 @@ jobs:
       - name: Crawl browser cohort with local Chromium
         if: github.event_name == 'schedule' || !inputs.diagnose
         env:
-          ACTIONS_BROWSER_SHOPS: ${{ github.event_name == 'schedule' && 'all' || inputs.shops }}
+          # Nightly: every registered shop (Chromium for the browser cohort, direct
+          # HTTP with full product-page checks for the rest).
+          ACTIONS_BROWSER_SHOPS: ${{ github.event_name == 'schedule' && 'registry' || inputs.shops }}
           AB_COMPARE: ${{ github.event_name == 'schedule' && 'false' || inputs.compare }}
           WRITE_SNAPSHOT: ${{ github.event_name == 'schedule' && 'true' || inputs.write_snapshot }}
           BROWSER_SNAPSHOT_DATABASE_URL: ${{ secrets.BROWSER_SNAPSHOT_DATABASE_URL }}

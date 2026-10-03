@@ -59,7 +59,8 @@ export async function loadFreshSnapshots(sql: Sql, shopIds: string[], now = new 
 
 /**
  * Merge snapshot offers into a direct crawl result. Direct observations win on
- * the same URL (they are fresher); snapshot offers must belong to the shop.
+ * the same URL (they are fresher) but take over the snapshot's product-page
+ * checks (sizes, reference price, stock) at the same price; snapshot offers must belong to the shop.
  */
 export function mergeSnapshot(
   crawl: { offers: RawOffer[]; coverage: SourceCoverage },
@@ -68,9 +69,26 @@ export function mergeSnapshot(
   if (!snapshot) return { ...crawl, added: 0 };
   const path = crawl.coverage.technicalPath || (crawl.coverage.technicalPath = []);
   const known = new Set(crawl.offers.map(offer => offer.url));
+  // The nightly run checks every premium trouser's product page; carry its
+  // sizes, reference price and sold-out state over to the same offer (same
+  // URL and price) when the Vercel crawl could not check that page itself.
+  const byUrl = new Map(snapshot.offers.filter(o => o && o.url && o.sourceId === crawl.coverage.sourceId).map(o => [o.url, o]));
+  let enriched = 0;
+  for (const offer of crawl.offers) {
+    const s = byUrl.get(offer.url);
+    if (!s || Math.abs(Number(s.price) - Number(offer.price)) > Math.max(0.02 * Number(offer.price), 0.5)) continue;
+    let changed = false;
+    if (s.sizeAvailability === 'available' && (s.sizes || []).length && offer.sizeAvailability !== 'available') {
+      offer.sizes = [...s.sizes]; offer.sizeAvailability = 'available'; changed = true;
+    }
+    if (s.rrp && s.rrpSource && !offer.rrpSource && s.rrp > Number(offer.price)) { offer.rrp = s.rrp; offer.rrpSource = s.rrpSource; changed = true; }
+    if (/out.of.stock/i.test(s.availability || '') && !/out.of.stock/i.test(offer.availability || '')) { offer.availability = s.availability; changed = true; }
+    if (changed) enriched++;
+  }
   const additions = snapshot.offers.filter(offer =>
     offer && offer.sourceId === crawl.coverage.sourceId && offer.url && !known.has(offer.url) && (known.add(offer.url), true));
   path.push('actions-browser-snapshot', `actions-browser-snapshot-age-${Math.max(0, Math.round((Date.now() - Date.parse(snapshot.collectedAt)) / 3600_000))}h`);
+  if (enriched) path.push(`actions-snapshot-enriched-${enriched}`);
   if (!additions.length) {
     path.push('actions-browser-snapshot-no-new-offers');
     return { ...crawl, added: 0 };
