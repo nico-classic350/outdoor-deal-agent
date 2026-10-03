@@ -236,8 +236,9 @@ if (process.env.ACTIONS_DIAGNOSE_PRODUCTS === 'true') {
     if (!source) continue;
     let offers = [];
     try { offers = (await crawlSource(source)).offers; } catch {}
-    const picks = offers.filter(o => o.name && productEligible(o.name, o.description)
-      && PROFILE.brands.some(b => fold(`${o.brand} ${o.name}`).includes(fold(b)))).slice(0, 2);
+    const eligible = offers.filter(o => o.name && productEligible(o.name, o.description));
+    const premium = eligible.filter(o => PROFILE.brands.some(b => fold(`${o.brand} ${o.name}`).includes(fold(b))));
+    const picks = (premium.length ? premium : eligible).slice(0, 2);
     console.log(`[product-survey] ${JSON.stringify({ shop: id, offers: offers.length, picks: picks.map(o => ({ url: o.url, name: o.name, price: o.price, rrp: o.rrp ?? null, sizes: o.sizes })) })}`);
     for (const pick of picks) {
       let staticInfo = {};
@@ -248,6 +249,8 @@ if (process.env.ACTIONS_DIAGNOSE_PRODUCTS === 'true') {
         staticInfo = { status: r.status, finalUrl: r.url, bytes: html.length, jsonLdBlocks: ld.length,
           jsonLdProduct: ld.some(x => /"Product"/.test(x)), jsonLdOffers: (ld.join(' ').match(/"Offer"/g) || []).length,
           jsonLdSample: ld.find(x => /"Product"/.test(x))?.slice(0, 700) ?? null,
+          jsonLdBrand: (() => { const x = ld.find(y => /"Product"/.test(y)) || ''; const i = x.search(/"brand"/); return i >= 0 ? x.slice(i, i + 200) : null; })(),
+          jsonLdOfferSample: (() => { const x = ld.find(y => /"Product"/.test(y)) || ''; const i = x.search(/"offers"|"hasVariant"/); return i >= 0 ? x.slice(i, i + 1400) : null; })(),
           referenceWords: [...new Set((html.match(/(?:UVP|statt|Normalpreis|ord\.?\s*pris|Ovh\.?|Alkuper[äa]inen|tidigare pris|før|was|compare.at|old-price|price--old|line-through|strike)/gi) || []).map(w => w.toLowerCase()))].slice(0, 12),
           stateScripts: [...new Set((html.match(/__NEXT_DATA__|__NUXT__|window\.__INITIAL_STATE__|application\/json|data-product-json|variants/g) || []))] };
       } catch (e) { staticInfo = { error: String(e?.message || e).slice(0, 80) }; }
