@@ -130,6 +130,21 @@ async function runArm(runtime) {
 const direct = compare ? await runArm('direct') : null;
 const collectedAt = new Date().toISOString();
 const local = await runArm('local');
+// Shops crawled without Chromium (direct phase) still get their deal sizes
+// read from the rendered product page; run after both phases, so switching
+// BROWSER_RUNTIME never overlaps a crawl.
+if (selection === 'registry' && process.env.VERIFY_SIZES !== 'false') {
+  process.env.BROWSER_RUNTIME = 'local';
+  for (const row of local.filter(r => !cohort.has(r.shop))) {
+    if (!row.offers.some(dealCandidate)) continue;
+    await verifyDealSizes(row.offers, row.coverage);
+    const checked = await Promise.allSettled(row.offers.map(normalizeOfferChecked));
+    row.normalized = checked.filter(r => r.status === 'fulfilled' && r.value.offer).map(r => r.value.offer);
+    row.metrics.normalizedOffers = row.normalized.length;
+    row.metrics.discount40Offers = row.normalized.filter(o => o.effectiveDiscountPct >= 40).length;
+    row.metrics.qualifiedOffers = selectOffers(row.normalized, 40).qualifiedCount;
+  }
+}
 await closeLocalBrowser();
 
 let sql = null;

@@ -158,3 +158,12 @@ test('JSON-LD SizeSpecification objects yield the size label; listing badges are
   const {offer:clean}=await normalizeOfferChecked({...offer,name:'bis 50% Odlo Ascent Pants Trekkinghose',rrp:112,rrpSource:'test'});
   assert.equal(clean.name,'Odlo Ascent Pants Trekkinghose');
 });
+
+test('ProductGroup variants inherit the group brand',()=>{
+  const source={id:'scandinavian-outdoor',name:'Scandinavian Outdoor',country:'FI',baseUrl:'https://scandinavianoutdoor.com',priority:1};
+  const group={'@type':'ProductGroup',name:'Lappland Hybrid Trousers',brand:{'@type':'Brand',name:'Fjällräven'},hasVariant:[
+    {'@type':'Product',name:'50 Dark Olive Lappland Hybrid Trousers',size:'50',offers:{'@type':'Offer',url:'https://scandinavianoutdoor.com/x?select-size=50',price:120,priceCurrency:'EUR',availability:'https://schema.org/InStock'}}]};
+  const [offer]=extractJsonLd(`<script type="application/ld+json">${JSON.stringify(group)}</script>`,source,'https://scandinavianoutdoor.com/x');
+  assert.equal(offer.brand,'Fjällräven');
+  assert.deepEqual(offer.sizes,['50']);
+});
