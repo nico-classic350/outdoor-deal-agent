@@ -474,7 +474,7 @@ async function renderAndExtract(
     if (links.length) steps.push(`product-links-${links.length}`);
     let loaded = 0, structured = 0;
     for (const link of links.slice(0, PRODUCT_LINK_LIMIT)) {
-      if (timeLeft(deadline, 0) < 8000) break;
+      if (deadline - Date.now() < 8000) break;
       try {
         const response = await page.goto(link, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 12000) });
         if (response && response.status() >= 400) continue;

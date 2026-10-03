@@ -8,7 +8,9 @@ import { PROFILE } from '../config/profile';
 // JSON-LD lists each variant with size, stock and (often) the reference price.
 // Only variants at the listing price count, so a size that is buyable at a
 // different price never confirms the deal.
-export const DETAIL_ENRICH_LIMIT = Math.max(0, Math.min(20, Number(process.env.DETAIL_ENRICH_LIMIT ?? 10)));
+export const DETAIL_ENRICH_LIMIT = Math.max(0, Math.min(30, Number(process.env.DETAIL_ENRICH_LIMIT ?? 20)));
+// Offers without any price evidence rarely gain one; keep most pages for deals.
+const NO_EVIDENCE_LIMIT = 6;
 
 export type DetailFetch = (url: string) => Promise<string | null>;
 
@@ -32,7 +34,7 @@ export function detailCandidates(offers: RawOffer[], limit = DETAIL_ENRICH_LIMIT
   // Deals first (evidence but no sizes), then trousers lacking any price evidence.
   const ranked = [
     ...eligible.filter(o => hasEvidence(o) && !(o.sizes || []).length),
-    ...eligible.filter(o => !hasEvidence(o)),
+    ...eligible.filter(o => !hasEvidence(o)).slice(0, NO_EVIDENCE_LIMIT),
   ];
   const out: RawOffer[] = [];
   for (const o of ranked) {
@@ -83,6 +85,6 @@ export async function enrichFromDetailPages(source: ShopSource, offers: RawOffer
       stats.sizes += Number(r.sizes); stats.evidence += Number(r.evidence); stats.soldOut += Number(r.soldOut);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([worker(), worker(), worker(), worker()]);
   return stats;
 }
