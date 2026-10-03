@@ -224,6 +224,61 @@ for (const id of diagnoseIds) {
 }
 await closeLocalBrowser();
 
+// Product-page survey (read-only): for two premium trousers per diagnosed shop,
+// what the static HTML carries (JSON-LD, reference-price words) and which
+// size controls the rendered page shows, with their disabled markers.
+if (process.env.ACTIONS_DIAGNOSE_PRODUCTS === 'true') {
+  const { PROFILE } = require('../config/profile.ts');
+  const { productEligible } = require('../lib/product-rules.mjs');
+  const fold = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ø/g, 'o');
+  for (const id of diagnoseIds) {
+    const source = SHOPS.find(shop => shop.id === id);
+    if (!source) continue;
+    let offers = [];
+    try { offers = (await crawlSource(source)).offers; } catch {}
+    const picks = offers.filter(o => o.name && productEligible(o.name, o.description)
+      && PROFILE.brands.some(b => fold(`${o.brand} ${o.name}`).includes(fold(b)))).slice(0, 2);
+    console.log(`[product-survey] ${JSON.stringify({ shop: id, offers: offers.length, picks: picks.map(o => ({ url: o.url, name: o.name, price: o.price, rrp: o.rrp ?? null, sizes: o.sizes })) })}`);
+    for (const pick of picks) {
+      let staticInfo = {};
+      try {
+        const r = await fetch(pick.url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)' }, signal: AbortSignal.timeout(15000) });
+        const html = await r.text();
+        const ld = [...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
+        staticInfo = { status: r.status, finalUrl: r.url, bytes: html.length, jsonLdBlocks: ld.length,
+          jsonLdProduct: ld.some(x => /"Product"/.test(x)), jsonLdOffers: (ld.join(' ').match(/"Offer"/g) || []).length,
+          jsonLdSample: ld.find(x => /"Product"/.test(x))?.slice(0, 700) ?? null,
+          referenceWords: [...new Set((html.match(/(?:UVP|statt|Normalpreis|ord\.?\s*pris|Ovh\.?|Alkuper[äa]inen|tidigare pris|før|was|compare.at|old-price|price--old|line-through|strike)/gi) || []).map(w => w.toLowerCase()))].slice(0, 12),
+          stateScripts: [...new Set((html.match(/__NEXT_DATA__|__NUXT__|window\.__INITIAL_STATE__|application\/json|data-product-json|variants/g) || []))] };
+      } catch (e) { staticInfo = { error: String(e?.message || e).slice(0, 80) }; }
+      let rendered = {};
+      let context = null;
+      try {
+        context = await newLocalContext();
+        const page = await context.newPage();
+        const resp = await page.goto(pick.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(3500);
+        rendered = { status: resp?.status() ?? null, controls: await page.evaluate(() => {
+          const sizeLike = /^(?:XXS|XS|S|M|L|XL|XXL|[2-5]XL|W?\d{2,3}(?:\s*[\/x]\s*L?\d{2})?|(?:EU|DE)\s*\d{2}|\d{2}\s*(?:\(EU\)|R|S|L|K))$/i;
+          const out = [];
+          for (const el of document.querySelectorAll('button, label, li, option, a, span, div[role="radio"], [role="option"]')) {
+            const text = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!sizeLike.test(text) || el.children.length > 2) continue;
+            const attrs = {};
+            for (const a of el.attributes) if (/^(class|disabled|aria-|data-|name|for|value|title)/.test(a.name)) attrs[a.name] = a.value.slice(0, 60);
+            out.push({ tag: el.tagName.toLowerCase(), text, attrs, parent: `${el.parentElement?.tagName.toLowerCase()}.${String(el.parentElement?.className || '').slice(0, 60)}` });
+            if (out.length >= 14) break;
+          }
+          return out;
+        }) };
+      } catch (e) { rendered = { error: String(e?.message || e).slice(0, 80) }; }
+      finally { try { await context?.close(); } catch {} }
+      console.log(`[product-page] ${JSON.stringify({ shop: id, url: pick.url, static: staticInfo, rendered })}`);
+    }
+  }
+  await closeLocalBrowser();
+}
+
 // Brand fields of structured shop APIs (read-only): which field names the
 // manufacturer, so offers whose titles omit the brand can still be matched.
 if (process.env.ACTIONS_DIAGNOSE_BRAND_FIELDS === 'true') {

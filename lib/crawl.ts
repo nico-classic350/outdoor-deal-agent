@@ -49,7 +49,9 @@ function absolute(base:string,u:string){try{return new URL(u,base).toString()}ca
 function safeShopUrl(source:ShopSource, url:string){
   try{
     const u=new URL(url), base=new URL(source.baseUrl);
-    return u.protocol==='https:' && (u.hostname===base.hostname || u.hostname===base.hostname.replace(/^www\./,''));
+    // Same shop with or without "www." on either side.
+    const bare=(host:string)=>host.replace(/^www\./,'');
+    return u.protocol==='https:' && bare(u.hostname)===bare(base.hostname);
   }catch{return false}
 }
 async function allowedByRobots(source:ShopSource,url:string,deadline:number){
