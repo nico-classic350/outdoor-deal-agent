@@ -31,7 +31,7 @@ function discountFrom($:any,scope:any){
   for(const label of labels){
     const match=label.match(/(?:−|-|–)?\s*(\d{1,2})\s*%/);
     const value=match?Number(match[1]):0;
-    if(value>=40&&value<100) return value;
+    if(value>=40&&value<=80) return value;
   }
   return undefined;
 }

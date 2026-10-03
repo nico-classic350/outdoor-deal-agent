@@ -83,7 +83,7 @@ function displayedDiscount($:any,card:any){
   for(const label of labels){
     const match=label.match(/(?:−|-|–)?\s*(\d{1,2})\s*%/);
     const pct=match?Number(match[1]):0;
-    if(pct>=40&&pct<100) return {pct,upTo:UP_TO.test(label)};
+    if(pct>=40&&pct<=80) return {pct,upTo:UP_TO.test(label)};
   }
   return undefined;
 }

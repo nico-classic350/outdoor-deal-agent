@@ -56,3 +56,12 @@ test('"bis" badges qualify only with a confirmed or probable size', () => {
   assert.match(unchecked.near[0].reason, /bis/);
   assert.equal(selectOffers([{ ...base, sizeFit: 'confirmed' }]).deals.length, 1);
 });
+
+test('implausible discounts above 85 % are near misses', () => {
+  const base = { sourceId: 's', url: 'https://x/2', brand: 'Haglöfs', name: 'Haglöfs Mid Slim Pant', currency: 'EUR', price: 110,
+    discountVerified: true, rrpVerified: false, discountSource: 'merchant:displayed-discount', observedDiscountPct: 98,
+    effectiveDiscountPct: 98, productFitScore: 80, score: 90, effectiveCostEur: 110, shippingKnown: true, sizeFit: 'unconfirmed' };
+  const result = selectOffers([base]);
+  assert.equal(result.deals.length, 0);
+  assert.match(result.near[0].reason, /85/);
+});

@@ -336,7 +336,7 @@ async function extractRenderedDomOffers(
       const price = Math.min(...(current.length ? current : prices));
       const rrp = referencePrice && referencePrice > price ? referencePrice : undefined;
       const badge = Number(row.text.match(/(?:^|\s)[-–−]\s?(\d{1,2})\s?%/)?.[1] || 0);
-      const displayedDiscount = !rrp && badge >= 40 && badge < 100 ? badge : undefined;
+      const displayedDiscount = !rrp && badge >= 40 && badge <= 80 ? badge : undefined;
       seen.add(row.href);
       out.push({
         sourceId: source.id,
