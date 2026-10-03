@@ -5,11 +5,10 @@
 // proxy, CAPTCHA or fingerprint evasion, so many of them will stay blocked.
 export const BROWSER_COHORT = {
   render: [
-    'sportfits', 'outdoor-renner', 'camp4', 'trekking-koenig', 'sport65', 'breuninger', 'sportspar',
-    'blue-tomato', 'hardloop', 'alpinstore', 'snowinn', 'barrabes', 'varuste', 'hanibal',
-    'rockpoint', 'privatesportshop', 'snowcountry', 'asadventure', 'vrijbuiter', 'zalando-de',
-    'aboutyou-de', 'bestsecret', 'odlo-eu', 'patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
-    'peakperformance-eu', 'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
+    'sportfits', 'outdoor-renner', 'camp4', 'trekking-koenig', 'breuninger', 'sportspar',
+    'blue-tomato', 'hardloop', 'alpinstore', 'barrabes', 'varuste', 'hanibal',
+    'rockpoint', 'snowcountry', 'asadventure', 'aboutyou-de', 'odlo-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu',
+    'tilak-eu', 'biwak', 'feinbier', 'biwakschachtel', 'carl-denig',
     'glisshop', 'outnorth',
     // Premium brand stores added with the September 2026 brand review.
     // (fjallraven-eu is Cloudflare-protected; surveyed on 30 September 2026.)
@@ -28,6 +27,11 @@ export const BROWSER_COHORT = {
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
     'ekosport', 'vieux-campeur', '8a', 'e-horyzont', 'sportler', 'oliunid', 'nencini', 'galeria',
     'ortovox-eu', 'lasportiva-eu', 'fjallraven-eu',
+    // Removed from the nightly render cohort after the 3 October 2026 diagnosis:
+    // 403/CloudFront (privatesportshop, peakperformance-eu), HTTP/2 error
+    // (vrijbuiter), navigation timeout (zalando-de), checkout queue page
+    // (patagonia-eu), members-only (bestsecret), US-dollar prices (snowinn).
+    'privatesportshop', 'peakperformance-eu', 'vrijbuiter', 'zalando-de', 'patagonia-eu', 'bestsecret', 'snowinn',
   ],
   // Small fixed cohort for A/B measurements (direct-only vs. direct + Chromium).
   pilot: ['patagonia-eu', 'rab-eu', 'norrona-eu', 'haglofs-eu', 'odlo-eu', 'lundhags-eu', 'klattermusen-eu', 'outdoor-renner'],
@@ -82,6 +86,12 @@ export const BROWSER_START_URLS: Record<string, string[]> = {
   'bottero': ['https://www.botteroski.com/it/651-offerte-outlet', 'https://www.botteroski.com/it/522-montagna/32-abbigliamento-montagna/35-Pantaloni-outdoor-uomo'],
   'bever': ['https://www.bever.nl/c/sale/sale-heren.html', 'https://www.bever.nl/c/sale/sale-wandelen.html'],
   'verticalextreme': ['https://www.verticalextreme.de/outlet-klettern-outdoor/kletterhosen-kletterbekleidung', 'https://www.verticalextreme.de/kletterbekleidung/funktionshosen-trekking-wandern-bergsteigen'],
+  // Outlet hiking clothing first (struck-through prices), then men's trousers.
+  'hardloop': ['https://www.hardloop.de/outlet/7896-ausrustung-wanderkleidung-guenstig-sale', 'https://www.hardloop.de/shop/472-outdoor-hosen-herren'],
+  // Session-free URLs: links carrying force_sid answer 403.
+  'biwakschachtel': ['https://www.biwakschachtel-tuebingen.de/bekleidung/maenner/hosen/', 'https://www.biwakschachtel-tuebingen.de/sale/'],
+  'bergans-eu': ['https://www.bergans.com/en/outlet/men', 'https://www.bergans.com/en/men/pants'],
+  'outnorth': ['https://www.outnorth.com/de/outlet', 'https://www.outnorth.com/de/herren/bekleidung/hosen'],
   'outdoor-renner': ['https://www.outdoor-renner.de/sale/', 'https://www.outdoor-renner.de/outdoorhosen-herren-kurzgroessen', 'https://www.outdoor-renner.de/wanderhosen-herren-uebergroesse/'],
 };
 

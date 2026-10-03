@@ -55,7 +55,12 @@ function rrpOf(product:any,offer:any,price?:number,productReferenceAllowed=true)
     ['product.originalPrice',product?.originalPrice]] : []),['offer.listPrice',offer?.listPrice],
     ['offer.originalPrice',offer?.originalPrice],
     ['offer.priceSpecification.referencePrice',offer?.priceSpecification?.referencePrice]] as const;
-  return fields.map(([source,value])=>({source,value:num(value)}))
+  // Google's recommended markup: priceSpecification entries typed as
+  // StrikethroughPrice/ListPrice carry the merchant's crossed-out price.
+  const specs=[offer?.priceSpecification].flat().filter(Boolean)
+    .filter((spec:any)=>/Strikethrough|ListPrice|MSRP|SRP/i.test(String(spec?.priceType||'')))
+    .map((spec:any)=>({source:'offer.priceSpecification.strikethrough',value:num(spec?.price)}));
+  return [...fields.map(([source,value])=>({source:source as string,value:num(value)})),...specs]
     .find(x=>x.value!=null && (!price || x.value>price));
 }
 
