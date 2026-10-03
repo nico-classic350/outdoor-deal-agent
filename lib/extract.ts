@@ -80,7 +80,9 @@ export function extractJsonLd(html:string, source:ShopSource, pageUrl:string):Ra
         const imageRaw=Array.isArray(p?.image)?p.image[0]:p?.image?.url??p?.image;
         const availability=text(o?.availability).split('/').pop()||'unknown';
         const color=text(p?.color)||undefined;
-        const size=text(o?.size||p?.size)||undefined;
+        // schema.org allows a SizeSpecification object ({"name":"46 (EU)"}) as well as plain text.
+        const sizeValue=o?.size??p?.size;
+        const size=text(typeof sizeValue==='object'&&sizeValue?(sizeValue.name??sizeValue.value??''):sizeValue)||undefined;
         seen.add(variantKey);
         const discount=reference?undefined:pageDiscount;
         const inStock=/InStock|LimitedAvailability/i.test(availability);

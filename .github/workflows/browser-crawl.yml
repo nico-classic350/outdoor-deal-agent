@@ -6,7 +6,9 @@ name: Chromium browser crawl
 # merge. It never writes batch/report rows and never sends mail.
 on:
   schedule:
-    - cron: '20 22 * * *'
+    # GitHub starts scheduled runs up to ~3 h late (observed 01:12–01:42 UTC for
+    # 22:20); 19:20 UTC keeps the snapshots ahead of the 00:00 UTC batches.
+    - cron: '20 19 * * *'
   workflow_dispatch:
     inputs:
       shops:

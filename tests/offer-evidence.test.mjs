@@ -147,3 +147,14 @@ test('explicitly labelled reference prices count, unlabelled second prices do no
   assert.equal(b.price,69.99); assert.equal(b.rrp,129.95);
   assert.equal(c.rrp,undefined,'an unlabelled higher price is no evidence');
 });
+
+test('JSON-LD SizeSpecification objects yield the size label; listing badges are cut from names',async()=>{
+  const {normalizeOfferChecked}=require('../lib/normalize.ts');
+  const source={id:'bergfreunde',name:'Bergfreunde',country:'DE',baseUrl:'https://www.bergfreunde.de',priority:1};
+  const html=`<script type="application/ld+json">${JSON.stringify({'@type':'Product',name:'Odlo - Ascent Pants - Trekkinghose',brand:{name:'Odlo'},
+    offers:[{'@type':'Offer',price:'55.98',priceCurrency:'EUR',availability:'https://schema.org/InStock',size:{'@type':'SizeSpecification',name:'52 (EU)'}}]})}</script>`;
+  const [offer]=extractJsonLd(html,source,'https://www.bergfreunde.de/odlo-ascent');
+  assert.deepEqual(offer.sizes,['52 (EU)']);
+  const {offer:clean}=await normalizeOfferChecked({...offer,name:'bis 50% Odlo Ascent Pants Trekkinghose',rrp:112,rrpSource:'test'});
+  assert.equal(clean.name,'Odlo Ascent Pants Trekkinghose');
+});

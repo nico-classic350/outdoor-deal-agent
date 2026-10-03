@@ -49,3 +49,23 @@ test('Magento GraphQL items use final vs regular price and in-stock size variant
   assert.equal(result.offers.length, 1);
   assert.equal(body.variables.search, 'pantaloni');
 });
+
+test('Magento manufacturer ids map to brand labels from the search aggregation; basic query as fallback', async () => {
+  const cfg = { type: 'magento', origin: 'https://shop.example', searches: ['broek'] };
+  const item = { name: 'Terravia Alpine Pants Men', url_key: 'terravia', stock_status: 'IN_STOCK', manufacturer: 66086,
+    price_range: { minimum_price: { regular_price: { value: 170, currency: 'EUR' }, final_price: { value: 85, currency: 'EUR' } } } };
+  const aggregations = [{ attribute_code: 'manufacturer', options: [{ label: 'Patagonia', value: '66086' }] }];
+  const fetcher = async () => ({ ok: true, status: 200, json: async () => ({ data: { products: { aggregations, items: [item] } } }) });
+  const [offer] = (await ingestMagento(source, cfg, Date.now() + 10000, fetcher)).offers;
+  assert.equal(offer.brand, 'Patagonia');
+  const queries = [];
+  const legacy = async (url, init) => {
+    const { query } = JSON.parse(init.body); queries.push(query);
+    return { ok: true, status: 200, json: async () => /manufacturer/.test(query)
+      ? { errors: [{ message: 'Cannot query field "manufacturer"' }] }
+      : { data: { products: { items: [{ ...item, manufacturer: undefined }] } } } };
+  };
+  const fallback = await ingestMagento(source, cfg, Date.now() + 10000, legacy);
+  assert.equal(fallback.offers.length, 1);
+  assert.equal(queries.length, 2);
+});

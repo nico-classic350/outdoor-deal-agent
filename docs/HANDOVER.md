@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | Shopregister und Suchprofil | `config/shops.ts`, `config/profile.ts` | 93 Quellen (92 EU-Shops + mydealz), Premium-Markenliste und Auswahlprofil |
 | Erfassung | `lib/crawl.ts`, `lib/targeted.ts`, `lib/feed.ts`, `lib/globetrotter-feed.ts` | Direkte Listings, offizielle zugängliche Feeds, Sitemaps, HTML/JSON-LD |
-| Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 22:20 UTC Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
+| Browser-Erfassung | `.github/workflows/browser-crawl.yml`, `scripts/actions-browser-crawl.mjs`, `lib/local-browser.ts`, `lib/browser-snapshots.ts`, `config/browser-cohort.ts` | Nächtlich 19:20 UTC (GitHub startet bis ~3 h verspätet) Playwright + Chromium auf GitHub-Runner (Open Source, kostenlos für öffentliche Repos); Snapshots in `agent_browser_snapshots`, von den Batches gemergt |
 | Browser-Fallback (optional) | `lib/browser.ts`, `lib/browser-config.mjs`, `lib/browser-budget.ts` | Browserless nur noch opt-in (`BROWSERLESS_DAILY_SESSION_LIMIT` Standard 0) |
 | Normalisierung und Auswahl | `lib/normalize.ts`, `lib/product-rules.mjs`, `lib/publication-safety.mjs` | Preisbeleg, Marke/Kategorie, Größenstatus, modellübergreifende Dublettenprüfung |
 | Speicherung | `lib/batch-run.ts`, `lib/store.ts` | `agent_batch_runs`, `agent_runs` in Neon |
@@ -29,7 +29,7 @@ Alle Cron-Zeiten in `vercel.json` sind **UTC**. In Deutschland im Sommer UTC+2, 
 
 | UTC-Zeit | Zweck |
 | --- | --- |
-| 22:20 (Vortag) | GitHub Actions Chromium-Crawl der Browser-Kohorte, speichert Snapshots |
+| 19:20 (Vortag, oft bis ~3 h später) | GitHub Actions Chromium-Crawl der Browser-Kohorte, speichert Snapshots |
 | 00:00–03:00 | 16 Batch-Crons à maximal sechs Shops |
 | 04:00–04:15 | 16 Einzel-Retries für fehlende Batches |
 | 05:00 | Finalisierung und E-Mail – nur ab 07:00 deutscher Zeit (Sommerzeit); im Winter wartet sie |

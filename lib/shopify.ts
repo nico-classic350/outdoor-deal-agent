@@ -16,7 +16,7 @@ type ShopifyVariant = { title?: string; price?: string; compare_at_price?: strin
 type ShopifyProduct = { title?: string; handle?: string; vendor?: string; product_type?: string; body_html?: string;
   options?: { name?: string; position?: number }[]; variants?: ShopifyVariant[]; images?: { src?: string }[] };
 
-const SIZE_OPTION = /^(size|größe|groesse|grösse|taille|storlek|koko|waist|bundweite|länge|inseam)$/i;
+const SIZE_OPTION = /^(size|sizes|größe|groesse|grösse|taille|taglia|taglia_id|taglie|talla|maat|storlek|størrelse|koko|rozmiar|velikost|waist|bundweite|länge|inseam)$/i;
 const MAX_PAGES = 4;
 
 function money(value: unknown): number | undefined {
