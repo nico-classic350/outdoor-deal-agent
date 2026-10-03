@@ -9,6 +9,7 @@ export type ShopifySource = {
   collections: string[];     // collection handles with men's trousers or sale items
   currency: 'EUR';           // verified via the diagnose run; other currencies are not configured
   brand?: string;            // for single-brand stores whose vendor field is empty
+  sizeMap?: Record<string, string>; // brand-specific size systems mapped to letters ("3" -> "L")
 };
 
 type ShopifyVariant = { title?: string; price?: string; compare_at_price?: string | null; available?: boolean;
@@ -42,6 +43,8 @@ export function shopifyProductToOffer(product: ShopifyProduct, cfg: ShopifySourc
   const sizes = sizeIndexes.length
     ? [...new Set(variants.flatMap(v => sizeIndexes.map(i => [v.option1, v.option2, v.option3][i]).filter(Boolean) as string[]))]
     : [];
+  // "L (3)": the letter decides the fit, the shop's own label stays visible.
+  const labelled = cfg.sizeMap ? sizes.map(size => cfg.sizeMap![size.trim()] ? `${cfg.sizeMap![size.trim()]} (${size.trim()})` : size) : sizes;
   return {
     sourceId: source.id,
     merchant: source.name,
@@ -54,7 +57,7 @@ export function shopifyProductToOffer(product: ShopifyProduct, cfg: ShopifySourc
     price: best.price,
     rrp,
     rrpSource: rrp ? 'shopify:compare_at_price' : undefined,
-    sizes,
+    sizes: labelled,
     sizeAvailability: sizes.length ? 'available' : undefined,
     availability: 'in_stock',
     description: stripHtml(`${product.product_type || ''} ${product.body_html || ''}`).slice(0, 500),

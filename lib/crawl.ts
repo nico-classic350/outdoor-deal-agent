@@ -16,11 +16,13 @@ import { SHOPIFY_SOURCES } from '../config/shopify-sources';
 import { ingestShopify } from './shopify';
 import { COMMERCE_SOURCES } from '../config/commerce-sources';
 import { ingestCommerceApi } from './commerce-apis';
+import { enrichFromDetailPages, DETAIL_ENRICH_LIMIT } from './detail-enrich';
 
 const UA='Mozilla/5.0 (compatible; OutdoorDealAgent/1.0; +https://outdoor-deal-agent.vercel.app/)';
 const robotsCache=new Map<string,Promise<ReturnType<typeof robotsParser>|null>>();
 const BRAND_TERMS=PROFILE.brands.flatMap(x=>[x.toLowerCase(),x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ø/g,'o')]);
 const SOURCE_BUDGET_MS = Math.max(20000, Math.min(90000, Number(process.env.SOURCE_BUDGET_MS || 45000)));
+const DETAIL_BUDGET_MS = Math.max(5000, Math.min(40000, Number(process.env.DETAIL_BUDGET_MS || 30000)));
 const GENERIC_URL_LIMIT = Math.max(8, Math.min(30, Number(process.env.GENERIC_URL_LIMIT || 20)));
 const BROWSER_FALLBACK_URL_LIMIT = Math.max(1, Math.min(3, Number(process.env.BROWSER_FALLBACK_URL_LIMIT || 2)));
 const EARLY_BROWSER_EMPTY_HTTP_THRESHOLD = Math.max(1, Math.min(5, Number(process.env.EARLY_BROWSER_EMPTY_HTTP_THRESHOLD || 2)));
@@ -86,6 +88,23 @@ export async function crawlSource(source:ShopSource):Promise<{offers:RawOffer[],
   const result=await crawlSourceUnbranded(source);
   const storeBrand=SHOP_BRAND[source.id];
   if(storeBrand) for(const offer of result.offers) if(!offer.brand) offer.brand=storeBrand;
+  // Product pages confirm sizes and add missing reference prices for a bounded
+  // set of premium trousers (not for shops that refused the crawler).
+  if(DETAIL_ENRICH_LIMIT>0 && result.offers.length && !['blocked','failed'].includes(result.coverage.status) && source.id!=='mydealz'){
+    const deadline=Date.now()+DETAIL_BUDGET_MS;
+    const fetchHtml=async(url:string)=>{
+      if(!/^https?:/.test(url) || !await allowedByRobots(source,url,deadline)) return null;
+      const response=await get(url,source,6000,deadline);
+      return response.ok && /html/i.test(response.headers.get('content-type')||'html') ? await response.text() : null;
+    };
+    try{
+      const stats=await enrichFromDetailPages(source,result.offers,fetchHtml,deadline);
+      if(stats.fetched){
+        result.coverage.technicalPath=[...(result.coverage.technicalPath||[]),`detail-pages-${stats.fetched}`,
+          `detail-sizes-${stats.sizes}`,`detail-evidence-${stats.evidence}`,...(stats.soldOut?[`detail-sold-out-${stats.soldOut}`]:[])];
+      }
+    }catch{ result.coverage.technicalPath=[...(result.coverage.technicalPath||[]),'detail-pages-error']; }
+  }
   return result;
 }
 
@@ -264,7 +283,7 @@ async function crawlSourceUnbranded(source:ShopSource):Promise<{offers:RawOffer[
           const variants=parsed.length?parsed:extractHtmlFallback(html,source,candidate.url);
           const samePrice=variants.filter(v=>Math.abs(Number(v.price)-Number(candidate.price))<0.011);
           detailOffers.push(...samePrice.map(v=>v.rrpSource?v:{...v,
-            observedDiscountPct:candidate.observedDiscountPct,discountSource:'merchant:displayed-discount'}));
+            observedDiscountPct:candidate.observedDiscountPct,discountSource:candidate.discountSource||'merchant:displayed-discount'}));
           if(samePrice.length) technicalPath.push('discount-detail-variant-validated');
         }catch{technicalPath.push('discount-product-detail-error');}
       }

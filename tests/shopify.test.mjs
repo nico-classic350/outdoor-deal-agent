@@ -49,3 +49,11 @@ test('collection JSON is paged and de-duplicated', async () => {
   assert.equal(calls.length, 1, 'fewer than 250 products ends paging');
   assert.match(calls[0], /\/collections\/men-bottoms\/products\.json\?limit=250&page=1$/);
 });
+
+test('Goldwin numeric sizes map to letters while keeping the shop label', () => {
+  const goldwin = { ...cfg, sizeMap: { '2': 'M', '3': 'L', '4': 'XL' } };
+  const offer = shopifyProductToOffer({ ...product, variants: [
+    { option1: 'Black', option2: '3', price: '160.00', compare_at_price: '320.00', available: true },
+    { option1: 'Black', option2: '4', price: '160.00', compare_at_price: '320.00', available: true }] }, goldwin, source);
+  assert.deepEqual(offer.sizes, ['L (3)', 'XL (4)']);
+});

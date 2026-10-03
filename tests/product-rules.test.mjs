@@ -185,3 +185,9 @@ test('women\'s marker is recognised with any apostrophe', () => {
   assert.equal(productEligible('Patagonia W’s Quandary Pants'), false);
   assert.equal(productEligible('PATAGONIA M´s Terravia Peak Pants Wanderhose'), true);
 });
+
+test('Czech and Finnish trouser words; women\'s markers with diacritics', () => {
+  assert.equal(productEligible('Pánské kalhoty Salewa Pedroc 3 DST'), true);
+  assert.equal(productEligible('Dámské kalhoty Salewa Pedroc'), false);
+  assert.equal(productEligible('Fjällräven Keb housut miesten'), true);
+});

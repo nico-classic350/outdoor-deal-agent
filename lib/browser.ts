@@ -4,7 +4,7 @@ import { DEFAULT_LLM_EXTRACTION_MODEL, llmExtractFromHtml } from './llm-extract'
 import { browserFallbackConfig } from './browser-config.mjs';
 import { reserveBrowserSession } from './browser-budget';
 import { newLocalContext } from './local-browser';
-import { normalizeSizeLabel } from './product-rules.mjs';
+import { normalizeSizeLabel, productEligible } from './product-rules.mjs';
 import { BROWSER_CARD_RULES, BrowserCardRule } from '../config/browser-cohort';
 import pLimit from 'p-limit';
 
@@ -336,7 +336,7 @@ async function extractRenderedDomOffers(
       const price = Math.min(...(current.length ? current : prices));
       const rrp = referencePrice && referencePrice > price ? referencePrice : undefined;
       const badge = Number(row.text.match(/(?:^|\s)[-–−]\s?(\d{1,2})\s?%/)?.[1] || 0);
-      const displayedDiscount = !rrp && badge >= 40 && badge < 100 ? badge : undefined;
+      const displayedDiscount = !rrp && badge >= 40 && badge <= 80 ? badge : undefined;
       seen.add(row.href);
       out.push({
         sourceId: source.id,
@@ -466,14 +466,62 @@ async function renderAndExtract(
       offers.push(...dom.filter(o => !known.has(o.url)));
     }
   }
+  const steps: string[] = [];
+  if (!offers.length) {
+    // No product cards matched: follow a few same-shop links that name trousers
+    // and read the product pages, whose JSON-LD is far more uniform than cards.
+    const links = await productLinkCandidates(page, url);
+    if (links.length) steps.push(`product-links-${links.length}`);
+    let loaded = 0, structured = 0;
+    for (const link of links.slice(0, PRODUCT_LINK_LIMIT)) {
+      if (deadline - Date.now() < 8000) break;
+      try {
+        const response = await page.goto(link, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 12000) });
+        if (response && response.status() >= 400) continue;
+        await stabilizeRenderedPage(page, deadline);
+        const pageHtml = await page.content();
+        loaded++;
+        // JSON-LD first; rendered DOM evidence for pages without structured data.
+        let found = extractJsonLd(pageHtml, source, link);
+        structured += found.length;
+        if (!found.length) found = (await extractRenderedDomOffers(page, source, link)).filter(o => o.url.split('?')[0] === link.split('?')[0]);
+        offers.push(...found.filter(o => productEligible(o.name || '', o.description || '')));
+      } catch { break; }
+    }
+    if (links.length) steps.push(`product-pages-${loaded}-jsonld-${structured}-offers-${offers.length}`, `product-link-sample-${new URL(links[0]).pathname.slice(0, 60)}`);
+  }
   offers = await enrichSingleOfferSizes(page, offers);
   return {
     offers,
     mode: 'playwright',
     httpStatus,
     renderedHtml: html,
-    steps: [offers.length ? 'playwright-extracted' : 'playwright-empty'],
+    steps: [offers.length ? 'playwright-extracted' : 'playwright-empty', ...steps],
   };
+}
+
+const PRODUCT_LINK_LIMIT = 5;
+const PRODUCT_LINK_WORDS = /(hose|pants?|trousers?|bukser|byxor|housut|kalhoty|broek|pantalon)/i;
+const PRODUCT_LINK_EXCLUDE = /(damen|women|womens|dame|naiset|damske|dámské|kids|kinder|shorts|tights|leggings)/i;
+
+async function productLinkCandidates(page: import('playwright-core').Page, url: string): Promise<string[]> {
+  const host = new URL(url).hostname;
+  const links = await page.$$eval('a[href]', anchors => anchors.map(a => ({
+    href: (a as HTMLAnchorElement).href, text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+  }))).catch(() => [] as { href: string; text: string }[]);
+  const seen = new Set<string>();
+  return links.filter(l => {
+    try {
+      const u = new URL(l.href);
+      if (u.hostname !== host || u.href === url || seen.has(u.pathname)) return false;
+      const hay = `${decodeURIComponent(u.pathname)} ${l.text}`;
+      // Product pages sit deeper than category pages and name the item.
+      const productLike = u.pathname.split('/').filter(Boolean).length >= 1 && /\d{3,}|\/p\/|\.html?$|_z\d+|-p\d+/i.test(u.pathname);
+      if (!productLike || !PRODUCT_LINK_WORDS.test(hay) || PRODUCT_LINK_EXCLUDE.test(hay)) return false;
+      seen.add(u.pathname);
+      return true;
+    } catch { return false; }
+  }).map(l => l.href);
 }
 
 async function localPlaywrightRequest(source: ShopSource, url: string, deadline: number): Promise<BrowserFallbackResult> {
