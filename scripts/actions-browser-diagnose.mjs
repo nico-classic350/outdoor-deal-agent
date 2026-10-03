@@ -236,6 +236,24 @@ if (process.env.ACTIONS_DIAGNOSE_PRODUCTION === 'true') {
     } catch (e) { production[path] = { error: String(e?.message || e).slice(0, 120) }; }
     console.log(`[production] ${path} ${production[path].status ?? production[path].error}`);
   }
+  // Compact log lines (artifacts cannot always be downloaded by reviewers).
+  const latest = production['/api/coverage']?.body?.latest;
+  const report = latest?.report || {};
+  const offerLine = d => ({ shop: d.sourceId, brand: d.brand, name: String(d.name || '').slice(0, 70), price: d.priceEur, rrp: d.rrpEur,
+    pct: d.effectiveDiscountPct, fit: d.sizeFit, sizes: (d.sizes || []).slice(0, 8), src: d.rrpSource || d.discountSource, cls: d.class });
+  const h = production['/api/health']?.body || {};
+  console.log(`[prod-health] ${JSON.stringify(Object.fromEntries(Object.entries(h).filter(([, v]) => typeof v !== 'object' || v === null)))}`);
+  console.log(`[prod-run] ${JSON.stringify({ runDate: latest?.run_date ?? latest?.runDate, startedAt: report.startedAt, finishedAt: report.finishedAt,
+    planned: report.plannedSources, attempted: report.attemptedSources, success: report.success, partial: report.partial, browser: report.browser,
+    blocked: report.blocked, failed: report.failed, raw: report.rawOffers, normalized: report.normalizedOffers, screened: report.screenedOffers,
+    confirmedSize: report.confirmedSizeOffers, deals: report.qualifiedDeals, near: report.nearMisses, comparison: report.comparison?.summary ?? null })}`);
+  for (const d of latest?.deals || []) console.log(`[prod-deal] ${JSON.stringify(offerLine(d))}`);
+  for (const d of latest?.near_misses || []) console.log(`[prod-near] ${JSON.stringify(offerLine(d))}`);
+  for (const c of report.coverage || []) console.log(`[prod-shop] ${JSON.stringify({ id: c.sourceId, st: c.status, code: c.diagnosticCode, raw: c.parsedOffers,
+    elig: c.eligibleOffers, ev: c.priceEvidenceOffers, sz: c.availableSizeOffers, q: c.qualifiedOffers, rej: c.rejectionReasons, ms: c.elapsedMs,
+    http: c.httpStatuses, path: (c.technicalPath || []).slice(-6) })}`);
+  for (const b of production['/api/batch-status']?.body?.batches || []) console.log(`[prod-batch] ${JSON.stringify({ i: b.batch_index,
+    start: b.started_at, end: b.finished_at, sources: b.source_count, offers: b.normalized_offer_count })}`);
   mkdirSync('observability', { recursive: true });
   writeFileSync('observability/actions-browser-production.json', JSON.stringify(production) + '\n');
 }
