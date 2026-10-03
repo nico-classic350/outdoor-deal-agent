@@ -67,6 +67,7 @@ jobs:
         env:
           ACTIONS_BROWSER_SHOPS: ${{ inputs.shops }}
           ACTIONS_DIAGNOSE_FEEDS: 'true'
+          ACTIONS_DIAGNOSE_PRODUCTION: 'true'
           MYDEALZ_ALERT_FEED_URL: ${{ secrets.MYDEALZ_ALERT_FEED_URL }}
         run: node scripts/actions-browser-diagnose.mjs
       - name: Crawl browser cohort with local Chromium

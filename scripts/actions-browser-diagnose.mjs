@@ -224,6 +224,22 @@ for (const id of diagnoseIds) {
 }
 await closeLocalBrowser();
 
+// Production snapshot (read-only public endpoints): latest finalized report,
+// today's batches and health, saved as an artifact for run reviews.
+if (process.env.ACTIONS_DIAGNOSE_PRODUCTION === 'true') {
+  const base = 'https://outdoor-deal-agent.vercel.app';
+  const production = {};
+  for (const path of ['/api/health', '/api/coverage', '/api/batch-status', '/api/probe']) {
+    try {
+      const r = await fetch(`${base}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(60000) });
+      production[path] = { status: r.status, body: await r.json().catch(() => null) };
+    } catch (e) { production[path] = { error: String(e?.message || e).slice(0, 120) }; }
+    console.log(`[production] ${path} ${production[path].status ?? production[path].error}`);
+  }
+  mkdirSync('observability', { recursive: true });
+  writeFileSync('observability/actions-browser-production.json', JSON.stringify(production) + '\n');
+}
+
 // Deal-community feeds (read-only): shows whether the runner may read them and
 // how their items look. Public feeds only; a personal alert feed is read from
 // the environment when set and its URL is never printed.
