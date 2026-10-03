@@ -93,7 +93,7 @@ async function measure(source, runtime) {
       qualifiedOffers: selectOffers(normalized, 40).qualifiedCount,
       status: coverage.status,
       httpStatuses: coverage.httpStatuses,
-      browserSteps: (coverage.technicalPath || []).filter(step => step.startsWith('browser-')),
+      browserSteps: (coverage.technicalPath || []).filter(step => step.startsWith('browser-') || step.startsWith('detail-')),
       elapsedMs: coverage.elapsedMs,
     },
   };

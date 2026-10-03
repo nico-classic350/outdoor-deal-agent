@@ -472,17 +472,23 @@ async function renderAndExtract(
     // and read the product pages, whose JSON-LD is far more uniform than cards.
     const links = await productLinkCandidates(page, url);
     if (links.length) steps.push(`product-links-${links.length}`);
+    let loaded = 0, structured = 0;
     for (const link of links.slice(0, PRODUCT_LINK_LIMIT)) {
       if (timeLeft(deadline, 0) < 8000) break;
       try {
         const response = await page.goto(link, { waitUntil: 'domcontentloaded', timeout: requireTime(deadline, 12000) });
         if (response && response.status() >= 400) continue;
         await stabilizeRenderedPage(page, deadline);
-        const found = extractJsonLd(await page.content(), source, link).filter(o => productEligible(o.name || '', o.description || ''));
-        offers.push(...found);
+        const pageHtml = await page.content();
+        loaded++;
+        // JSON-LD first; rendered DOM evidence for pages without structured data.
+        let found = extractJsonLd(pageHtml, source, link);
+        structured += found.length;
+        if (!found.length) found = (await extractRenderedDomOffers(page, source, link)).filter(o => o.url.split('?')[0] === link.split('?')[0]);
+        offers.push(...found.filter(o => productEligible(o.name || '', o.description || '')));
       } catch { break; }
     }
-    if (links.length) steps.push(`product-pages-offers-${offers.length}`);
+    if (links.length) steps.push(`product-pages-${loaded}-jsonld-${structured}-offers-${offers.length}`, `product-link-sample-${new URL(links[0]).pathname.slice(0, 60)}`);
   }
   offers = await enrichSingleOfferSizes(page, offers);
   return {
