@@ -224,6 +224,68 @@ for (const id of diagnoseIds) {
 }
 await closeLocalBrowser();
 
+// Brand fields of structured shop APIs (read-only): which field names the
+// manufacturer, so offers whose titles omit the brand can still be matched.
+if (process.env.ACTIONS_DIAGNOSE_BRAND_FIELDS === 'true') {
+  const post = async (origin, query) => {
+    try {
+      const r = await fetch(`${origin}/graphql`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
+        'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)' }, body: JSON.stringify({ query }), signal: AbortSignal.timeout(15000) });
+      return { status: r.status, body: (await r.text()).slice(0, 900) };
+    } catch (e) { return { error: String(e?.message || e).slice(0, 80) }; }
+  };
+  for (const origin of ['https://www.maxisport.com', 'https://www.snowcountry.eu']) {
+    for (const [label, query] of [
+      ['manufacturer', '{ products(search: "patagonia", pageSize: 2) { items { name manufacturer } } }'],
+      ['brand', '{ products(search: "patagonia", pageSize: 2) { items { name brand } } }'],
+      ['attributesV2', '{ products(search: "patagonia", pageSize: 2) { items { name custom_attributesV2 { items { code ... on AttributeValue { value } ... on AttributeSelectedOptions { selected_options { label } } } } } } }'],
+      ['aggregations', '{ products(search: "pantaloni", pageSize: 1) { aggregations { attribute_code label options { label count } } } }'],
+    ]) console.log(`[brand-field] ${JSON.stringify({ origin, label, ...(await post(origin, query)) })}`);
+  }
+  for (const [origin, handle] of [['https://www.sportit.com', 'pantaloni-abbigliamento'], ['https://df-sportspecialist.it', 'montagna']]) {
+    try {
+      const r = await fetch(`${origin}/collections/${handle}/products.json?limit=8`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+      const j = await r.json();
+      console.log(`[brand-field] ${JSON.stringify({ origin, status: r.status, products: (j.products || []).map(p => ({ title: p.title, vendor: p.vendor,
+        type: p.product_type, tags: (p.tags || []).slice?.(0, 8), options: (p.options || []).map(o => o.name) })) })}`);
+    } catch (e) { console.log(`[brand-field] ${JSON.stringify({ origin, error: String(e?.message || e).slice(0, 80) })}`); }
+  }
+}
+
+// Production snapshot (read-only public endpoints): latest finalized report,
+// today's batches and health, saved as an artifact for run reviews.
+if (process.env.ACTIONS_DIAGNOSE_PRODUCTION === 'true') {
+  const base = 'https://outdoor-deal-agent.vercel.app';
+  const production = {};
+  for (const path of ['/api/health', '/api/coverage', '/api/batch-status', '/api/probe']) {
+    try {
+      const r = await fetch(`${base}${path}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(60000) });
+      production[path] = { status: r.status, body: await r.json().catch(() => null) };
+    } catch (e) { production[path] = { error: String(e?.message || e).slice(0, 120) }; }
+    console.log(`[production] ${path} ${production[path].status ?? production[path].error}`);
+  }
+  // Compact log lines (artifacts cannot always be downloaded by reviewers).
+  const latest = production['/api/coverage']?.body?.latest;
+  const report = latest?.report || {};
+  const offerLine = d => ({ shop: d.sourceId, brand: d.brand, name: String(d.name || '').slice(0, 70), price: d.priceEur, rrp: d.rrpEur,
+    pct: d.effectiveDiscountPct, fit: d.sizeFit, sizes: (d.sizes || []).slice(0, 8), src: d.rrpSource || d.discountSource, cls: d.class });
+  const h = production['/api/health']?.body || {};
+  console.log(`[prod-health] ${JSON.stringify(Object.fromEntries(Object.entries(h).filter(([, v]) => typeof v !== 'object' || v === null)))}`);
+  console.log(`[prod-run] ${JSON.stringify({ runDate: latest?.run_date ?? latest?.runDate, startedAt: report.startedAt, finishedAt: report.finishedAt,
+    planned: report.plannedSources, attempted: report.attemptedSources, success: report.success, partial: report.partial, browser: report.browser,
+    blocked: report.blocked, failed: report.failed, raw: report.rawOffers, normalized: report.normalizedOffers, screened: report.screenedOffers,
+    confirmedSize: report.confirmedSizeOffers, deals: report.qualifiedDeals, near: report.nearMisses, comparison: report.comparison?.summary ?? null })}`);
+  for (const d of latest?.deals || []) console.log(`[prod-deal] ${JSON.stringify(offerLine(d))}`);
+  for (const d of latest?.near_misses || []) console.log(`[prod-near] ${JSON.stringify(offerLine(d))}`);
+  for (const c of report.coverage || []) console.log(`[prod-shop] ${JSON.stringify({ id: c.sourceId, st: c.status, code: c.diagnosticCode, raw: c.parsedOffers,
+    elig: c.eligibleOffers, ev: c.priceEvidenceOffers, sz: c.availableSizeOffers, q: c.qualifiedOffers, rej: c.rejectionReasons, ms: c.elapsedMs,
+    http: c.httpStatuses, path: (c.technicalPath || []).slice(-6) })}`);
+  for (const b of production['/api/batch-status']?.body?.batches || []) console.log(`[prod-batch] ${JSON.stringify({ i: b.batch_index,
+    start: b.started_at, end: b.finished_at, sources: b.source_count, offers: b.normalized_offer_count })}`);
+  mkdirSync('observability', { recursive: true });
+  writeFileSync('observability/actions-browser-production.json', JSON.stringify(production) + '\n');
+}
+
 // Deal-community feeds (read-only): shows whether the runner may read them and
 // how their items look. Public feeds only; a personal alert feed is read from
 // the environment when set and its URL is never printed.

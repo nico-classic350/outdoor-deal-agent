@@ -21,6 +21,8 @@ function brandOf(o:RawOffer){
 export type RejectionReason = 'brand-not-allowed'|'name-missing'|'currency-missing'|'price-missing'|'discount-unverified'|'product-mismatch'|
   'sold-out'|'excluded-color'|'low-product-fit'|'incompatible-size';
 export async function normalizeOfferChecked(o:RawOffer):Promise<{offer:NormalizedOffer|null;reason?:RejectionReason}>{
+  // Listing badges glued to the title ("50% Bergans …", "bis 50% Lundhags …") are not part of the name.
+  if(o.name) o={...o,name:o.name.replace(/^\s*(?:bis\s+(?:zu\s+)?)?[-–]?\s*\d{1,2}\s*%\s+/i,'').trim()};
   const brand=brandOf(o);
   if (!o.name) return {offer:null,reason:'name-missing'};
   if (!brand) return {offer:null,reason:'brand-not-allowed'};

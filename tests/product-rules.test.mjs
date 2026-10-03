@@ -179,3 +179,9 @@ test('women abbreviations, casual/warm styles and foreign trouser words are clas
   assert.equal(productEligible('50% Dynafit Transalper DST Pants Trekkinghose'), true);
   assert.equal(productEligible('Mountain Equipment - Sella Pant - Softshellhose - Goblin Blue'), true);
 });
+
+test('women\'s marker is recognised with any apostrophe', () => {
+  assert.equal(productEligible('PATAGONIA W´s Outdoor Everyday Cargo Pants'), false);
+  assert.equal(productEligible('Patagonia W’s Quandary Pants'), false);
+  assert.equal(productEligible('PATAGONIA M´s Terravia Peak Pants Wanderhose'), true);
+});

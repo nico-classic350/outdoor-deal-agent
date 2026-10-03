@@ -92,29 +92,52 @@ export async function ingestWooCommerce(source: ShopSource, cfg: WooCommerceSour
 
 type MagentoMoney = { value?: number; currency?: string };
 type MagentoItem = {
-  name?: string; url_key?: string; url_suffix?: string; stock_status?: string;
+  name?: string; url_key?: string; url_suffix?: string; stock_status?: string; manufacturer?: number | string | null;
   small_image?: { url?: string };
   price_range?: { minimum_price?: { regular_price?: MagentoMoney; final_price?: MagentoMoney } };
   configurable_options?: { attribute_code?: string; label?: string; values?: { label?: string; value_index?: number }[] }[];
   variants?: { attributes?: { code?: string; label?: string; value_index?: number }[]; product?: { stock_status?: string } }[];
 };
 
-const MAGENTO_QUERY = `query($search: String!, $page: Int!) {
-  products(search: $search, pageSize: 100, currentPage: $page) {
-    total_count
-    items {
+// `manufacturer` is an option id; the search aggregation maps ids to brand
+// labels (titles in these shops usually omit the brand). Stores whose schema
+// lacks the field get the basic query.
+const MAGENTO_ITEM_FIELDS = `
       name url_key url_suffix stock_status
       small_image { url }
       price_range { minimum_price { regular_price { value currency } final_price { value currency } } }
       ... on ConfigurableProduct {
         configurable_options { attribute_code label values { label value_index } }
         variants { attributes { code label value_index } product { stock_status } }
-      }
+      }`;
+const MAGENTO_QUERY = `query($search: String!, $page: Int!) {
+  products(search: $search, pageSize: 100, currentPage: $page) {
+    total_count
+    aggregations { attribute_code options { label value } }
+    items { manufacturer ${MAGENTO_ITEM_FIELDS}
+    }
+  }
+}`;
+const MAGENTO_QUERY_BASIC = `query($search: String!, $page: Int!) {
+  products(search: $search, pageSize: 100, currentPage: $page) {
+    total_count
+    items { ${MAGENTO_ITEM_FIELDS}
     }
   }
 }`;
 
-export function magentoItemToOffer(item: MagentoItem, cfg: MagentoSource, source: ShopSource): RawOffer | null {
+type MagentoAggregation = { attribute_code?: string; options?: { label?: string; value?: string | number }[] };
+export function magentoBrandLabels(aggregations: MagentoAggregation[] | undefined): Map<string, string> {
+  const brands = new Map<string, string>();
+  for (const agg of aggregations || []) {
+    if (!/^(manufacturer|brand|marca|merk|marke)$/i.test(String(agg.attribute_code || ''))) continue;
+    for (const o of agg.options || []) if (o.value != null && o.label) brands.set(String(o.value), String(o.label).trim());
+  }
+  return brands;
+}
+
+export function magentoItemToOffer(item: MagentoItem, cfg: MagentoSource, source: ShopSource,
+  brands: Map<string, string> = new Map()): RawOffer | null {
   const min = item.price_range?.minimum_price;
   const final = min?.final_price, regular = min?.regular_price;
   if (!item.name || !item.url_key || !final?.value || item.stock_status === 'OUT_OF_STOCK') return null;
@@ -130,7 +153,8 @@ export function magentoItemToOffer(item: MagentoItem, cfg: MagentoSource, source
   return {
     sourceId: source.id, merchant: source.name, merchantCountry: source.country,
     url: `${cfg.origin}/${item.url_key}${item.url_suffix ?? cfg.urlSuffix ?? '.html'}`,
-    imageUrl: item.small_image?.url, brand: cfg.brand, name: stripHtml(item.name),
+    imageUrl: item.small_image?.url, brand: (item.manufacturer != null ? brands.get(String(item.manufacturer)) : undefined) || cfg.brand,
+    name: stripHtml(item.name),
     currency: 'EUR', price, rrp, rrpSource: rrp ? 'magento:regular_price' : undefined,
     sizes, sizeAvailability: sizes.length ? 'available' : undefined, availability: 'in_stock',
   };
@@ -140,19 +164,31 @@ export async function ingestMagento(source: ShopSource, cfg: MagentoSource, dead
   fetcher: typeof fetch = fetch): Promise<{ offers: RawOffer[]; statuses: number[] }> {
   const offers = new Map<string, RawOffer>();
   const statuses: number[] = [];
+  let query = MAGENTO_QUERY;
   for (const search of cfg.searches) {
+    let brands = new Map<string, string>();
     for (let page = 1; page <= MAX_PAGES; page++) {
       if (Date.now() > deadline - 2000) return { offers: [...offers.values()], statuses };
-      const response = await fetcher(`${cfg.origin}/graphql`, {
+      const post = (q: string) => fetcher(`${cfg.origin}/graphql`, {
         method: 'POST', headers: { 'user-agent': UA, accept: 'application/json', 'content-type': 'application/json' },
-        body: JSON.stringify({ query: MAGENTO_QUERY, variables: { search, page } }), signal: timeout(deadline, 15000),
+        body: JSON.stringify({ query: q, variables: { search, page } }), signal: timeout(deadline, 15000),
       });
+      let response = await post(query);
       statuses.push(response.status);
       if (!response.ok) break;
-      const json = await response.json() as { data?: { products?: { total_count?: number; items?: MagentoItem[] } } };
+      type Result = { data?: { products?: { total_count?: number; aggregations?: MagentoAggregation[]; items?: MagentoItem[] } }; errors?: unknown[] };
+      let json = await response.json() as Result;
+      if (!json?.data?.products && json?.errors && query === MAGENTO_QUERY) {
+        query = MAGENTO_QUERY_BASIC;
+        response = await post(query);
+        statuses.push(response.status);
+        if (!response.ok) break;
+        json = await response.json() as Result;
+      }
+      if (page === 1) brands = magentoBrandLabels(json?.data?.products?.aggregations);
       const items = json?.data?.products?.items || [];
       for (const item of items) {
-        const offer = magentoItemToOffer(item, cfg, source);
+        const offer = magentoItemToOffer(item, cfg, source, brands);
         if (offer && !offers.has(offer.url)) offers.set(offer.url, offer);
       }
       if (items.length < 100) break;
