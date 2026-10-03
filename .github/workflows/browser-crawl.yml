@@ -71,6 +71,7 @@ jobs:
           ACTIONS_DIAGNOSE_FEEDS: 'true'
           ACTIONS_DIAGNOSE_PRODUCTION: 'true'
           ACTIONS_DIAGNOSE_BRAND_FIELDS: 'true'
+          ACTIONS_DIAGNOSE_PRODUCTS: 'true'
           MYDEALZ_ALERT_FEED_URL: ${{ secrets.MYDEALZ_ALERT_FEED_URL }}
         run: node scripts/actions-browser-diagnose.mjs
       - name: Crawl browser cohort with local Chromium

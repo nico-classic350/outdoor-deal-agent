@@ -375,6 +375,9 @@ async function readAvailableSizes(page: import('playwright-core').Page): Promise
     '.product-detail-configurator-option-label', '.swatch-option.text', '[data-size]',
     'fieldset[data-option*="size" i] label', 'fieldset[name*="size" i] label', 'variant-radios label', 'variant-selects option',
     'input[type="radio"][name*="size" i] + label', 'input[type="radio"][name*="größe" i] + label', '[role="radio"][aria-label]',
+    // Headless UI radio groups (Lundhags: aria-disabled marks sold-out sizes) and
+    // select-to-button pickers (4camping: disabled buttons are sold out).
+    '[role="radio"]', '[aria-checked]', '.trigger--select-to-triggers',
   ].join(',');
   const values = (await page.locator(selectors).evaluateAll(elements=>elements
     .filter(el=>!el.closest('[disabled],[aria-disabled="true"],[data-disabled="true"],[data-sold-out="true"],.disabled,.sold-out,[class*="unavailable"],[class*="soldout"],[class*="sold-out"],.is-combinable-false,[class*="not-available"]') &&
@@ -382,7 +385,7 @@ async function readAvailableSizes(page: import('playwright-core').Page): Promise
       !(el instanceof HTMLOptionElement && el.disabled) &&
       !(el instanceof HTMLButtonElement && el.disabled) &&
       !(el instanceof HTMLLabelElement && el.htmlFor && (document.getElementById(el.htmlFor) as HTMLInputElement|null)?.disabled))
-    .map(el=>((el.getAttribute('role')==='radio' ? el.getAttribute('aria-label') : el.getAttribute('data-size')) || el.textContent || '').trim())))
+    .map(el=>(el.getAttribute('data-size') || el.getAttribute('data-content') || (el.getAttribute('role')==='radio' ? el.getAttribute('aria-label') : '') || el.textContent || '').trim())))
     .map(v => v.replace(/\s+/g, ' ').trim())
     .filter(v => v.length <= 24 && (normalizeSizeLabel(v) !== 'unknown' ||
       /^(?:W?\d{2,3}(?:\s*[/x]\s*L?\d{2})?|(?:EU|DE)\s*\d{2}|XXS|XS|S|M|L|XL|XXL|[2-5]XL)$/i.test(v)));

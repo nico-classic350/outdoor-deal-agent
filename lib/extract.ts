@@ -39,6 +39,9 @@ function productNodes(value:any,out:any[]=[]):any[]{
   if(!value) return out;
   if(Array.isArray(value)){ for(const x of value) productNodes(x,out); return out; }
   if(typeof value!=='object') return out;
+  // ProductGroup (schema.org variants): the brand often sits on the group only.
+  if(Array.isArray(value.hasVariant)) for(const variant of value.hasVariant)
+    if(variant&&typeof variant==='object'&&!variant.brand&&value.brand) variant.brand=value.brand;
   const type=value['@type'];
   if(type==='Product'||(Array.isArray(type)&&type.includes('Product'))) out.push(value);
   for(const v of Object.values(value)) if(v&&typeof v==='object') productNodes(v,out);
