@@ -224,6 +224,34 @@ for (const id of diagnoseIds) {
 }
 await closeLocalBrowser();
 
+// Brand fields of structured shop APIs (read-only): which field names the
+// manufacturer, so offers whose titles omit the brand can still be matched.
+if (process.env.ACTIONS_DIAGNOSE_BRAND_FIELDS === 'true') {
+  const post = async (origin, query) => {
+    try {
+      const r = await fetch(`${origin}/graphql`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
+        'user-agent': 'Mozilla/5.0 (compatible; OutdoorDealAgent/1.0)' }, body: JSON.stringify({ query }), signal: AbortSignal.timeout(15000) });
+      return { status: r.status, body: (await r.text()).slice(0, 900) };
+    } catch (e) { return { error: String(e?.message || e).slice(0, 80) }; }
+  };
+  for (const origin of ['https://www.maxisport.com', 'https://www.snowcountry.eu']) {
+    for (const [label, query] of [
+      ['manufacturer', '{ products(search: "patagonia", pageSize: 2) { items { name manufacturer } } }'],
+      ['brand', '{ products(search: "patagonia", pageSize: 2) { items { name brand } } }'],
+      ['attributesV2', '{ products(search: "patagonia", pageSize: 2) { items { name custom_attributesV2 { items { code ... on AttributeValue { value } ... on AttributeSelectedOptions { selected_options { label } } } } } } }'],
+      ['aggregations', '{ products(search: "pantaloni", pageSize: 1) { aggregations { attribute_code label options { label count } } } }'],
+    ]) console.log(`[brand-field] ${JSON.stringify({ origin, label, ...(await post(origin, query)) })}`);
+  }
+  for (const [origin, handle] of [['https://www.sportit.com', 'pantaloni-abbigliamento'], ['https://df-sportspecialist.it', 'montagna']]) {
+    try {
+      const r = await fetch(`${origin}/collections/${handle}/products.json?limit=8`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+      const j = await r.json();
+      console.log(`[brand-field] ${JSON.stringify({ origin, status: r.status, products: (j.products || []).map(p => ({ title: p.title, vendor: p.vendor,
+        type: p.product_type, tags: (p.tags || []).slice?.(0, 8), options: (p.options || []).map(o => o.name) })) })}`);
+    } catch (e) { console.log(`[brand-field] ${JSON.stringify({ origin, error: String(e?.message || e).slice(0, 80) })}`); }
+  }
+}
+
 // Production snapshot (read-only public endpoints): latest finalized report,
 // today's batches and health, saved as an artifact for run reviews.
 if (process.env.ACTIONS_DIAGNOSE_PRODUCTION === 'true') {
