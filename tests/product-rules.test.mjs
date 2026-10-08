@@ -191,3 +191,13 @@ test('Czech and Finnish trouser words; women\'s markers with diacritics', () => 
   assert.equal(productEligible('Dámské kalhoty Salewa Pedroc'), false);
   assert.equal(productEligible('Fjällräven Keb housut miesten'), true);
 });
+
+test('bare numbers, shop suffixes and French sizing', () => {
+  for (const [label, expected] of [['48', 'incompatible'], ['54', 'incompatible'], ['50 (EU)', 'near'], ['52 - Regular (EU)', 'near'],
+    ['50 - Long (EU)', 'incompatible'], ['D108', 'incompatible'], ['30', 'incompatible'], ['36', 'incompatible'], ['34', 'near'], ['25', 'unknown']])
+    assert.equal(normalizeSizeLabel(label), expected, label);
+  assert.equal(normalizeSizeLabel('44', 'fr'), 'near');
+  assert.equal(normalizeSizeLabel('50', 'fr'), 'incompatible');
+  assert.equal(sizeEvidence(['48', '58']), 'no');
+  assert.equal(sizeEvidence(['46', '48', '50', '52', '54']), 'probable');
+});

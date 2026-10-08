@@ -15,7 +15,7 @@ export const BROWSER_COHORT = {
     'lundhags-eu', 'bergans-eu', 'klattermusen-eu',
     // Shops whose direct crawl found no relevant products (whole-pipeline run,
     // 30 September 2026) but whose listings render with euro prices.
-    'tapir', 'sportscheck', 'sportano', 'bottero', 'bever', 'verticalextreme',
+    'tapir', 'sportano', 'bottero', 'bever', 'verticalextreme',
     // Direct pages list products without reference prices; their sale/outlet
     // pages show struck-through prices (registry diagnosis, 30 September 2026).
     'engelhorn', 'sportokay', 'sport-conrad', 'gigasport',
@@ -27,6 +27,9 @@ export const BROWSER_COHORT = {
     'sport-bittl', 'unterwegs', 'doorout', 'decathlon-de', 'sportdeal24', 'hervis', 'snowleader',
     'ekosport', 'vieux-campeur', '8a', 'e-horyzont', 'sportler', 'oliunid', 'nencini', 'galeria',
     'ortovox-eu', 'lasportiva-eu', 'fjallraven-eu',
+    // SportScheck rendered 60+ products but no men's premium trousers on any
+    // night from 3 to 7 October 2026 while using the full 180 s budget; it stays
+    // in the direct crawl.
     // Removed from the nightly render cohort after the 3 October 2026 diagnosis:
     // 403/CloudFront (privatesportshop, peakperformance-eu), HTTP/2 error
     // (vrijbuiter), navigation timeout (zalando-de), checkout queue page

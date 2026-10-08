@@ -6,8 +6,11 @@ name: Chromium browser crawl
 # merge. It never writes batch/report rows and never sends mail.
 on:
   schedule:
-    # GitHub starts scheduled runs up to ~3 h late (observed 01:12–01:42 UTC for
-    # 22:20); 19:20 UTC keeps the snapshots ahead of the 00:00 UTC batches.
+    # GitHub starts scheduled runs late (observed up to 5.5 h, 3–8 Oct 2026).
+    # Two schedules: whichever finishes last before 00:00 UTC supplies the
+    # snapshots (same-day rows are overwritten), and a run delayed past
+    # midnight cannot leave the first Vercel batches without data.
+    - cron: '20 16 * * *'
     - cron: '20 19 * * *'
   workflow_dispatch:
     inputs:
