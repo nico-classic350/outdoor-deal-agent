@@ -40,7 +40,7 @@ export async function normalizeOfferChecked(o:RawOffer):Promise<{offer:Normalize
   // Category suitability is decided above; fit ranks eligible trousers rather
   // than silently excluding a genuine outdoor/trekking/softshell product.
   const fit=Math.min(100,productFitScore(o.name,o.description)+colorBonus);
-  const sizeFit=inferSizeFit(o.sizes); if(sizeFit==='no') return {offer:null,reason:'incompatible-size'};
+  const sizeFit=inferSizeFit(o.sizes,o.merchantCountry); if(sizeFit==='no') return {offer:null,reason:'incompatible-size'};
   const priceEur=await eurValue(o.price,o.currency), rrpEur=rrp?await eurValue(rrp,o.currency):null;
   const shippingKnown=o.shipping!=null;
   const shippingEur=shippingKnown?await eurValue(o.shipping!,o.currency):0;
