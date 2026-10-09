@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import type { NormalizedOffer, RunReport } from './types';
-import { renderRunEmail } from './email-template';
+import { renderRunEmail, renderRunText } from './email-template';
 import { notificationConfig } from './mail-config.mjs';
 import { sendGmailEmail } from './gmail-smtp.mjs';
 
@@ -11,15 +11,16 @@ export type NotificationResult = 'sent' | 'pending' | 'not-configured';
 async function submitEmail(runDate: string, snapshotAt: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport) {
   const subject = `Outdoor Deal Alert ${runDate}${report.comparison?.baselineKind === 'same-day-rerun' ? ' (aktualisiert)' : ''}: ${deals.length} Deals`;
   const html = renderRunEmail(runDate, deals, near, report);
+  const text = renderRunText(runDate, deals, near, report);
   if (notificationConfig().provider === 'gmail') {
     return sendGmailEmail({ user: process.env.GMAIL_SMTP_USER!, password: process.env.GMAIL_SMTP_APP_PASSWORD!,
-      to: process.env.DEAL_NOTIFY_TO!, subject, html, runDate, snapshotAt });
+      to: process.env.DEAL_NOTIFY_TO!, subject, html, text, runDate, snapshotAt });
   }
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST', signal: AbortSignal.timeout(12000),
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json',
       'Idempotency-Key': `outdoor-deals/${runDate}/${snapshotAt}` },
-    body: JSON.stringify({ from: process.env.DEAL_NOTIFY_FROM, to: [process.env.DEAL_NOTIFY_TO], subject, html }),
+    body: JSON.stringify({ from: process.env.DEAL_NOTIFY_FROM, to: [process.env.DEAL_NOTIFY_TO], subject, html, text }),
   });
   if (!response.ok) throw new Error(`notification HTTP ${response.status}`);
   const result: unknown = await response.json();
