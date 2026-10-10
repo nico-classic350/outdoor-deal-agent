@@ -34,7 +34,13 @@ function sizeText(offer: NormalizedOffer) {
   return 'nicht verifiziert – im Shop prüfen';
 }
 
-function dealRow(offer: NormalizedOffer) {
+type HideLink = (offer: NormalizedOffer) => string | null;
+const hideAnchor = (offer: NormalizedOffer, hide?: HideLink) => {
+  const href = hide ? safeUrl(hide(offer) || undefined) : null;
+  return href ? ` · <a href="${esc(href)}" style="color:#777;font-size:12px">Nicht relevant – ausblenden</a>` : '';
+};
+
+function dealRow(offer: NormalizedOffer, hide?: HideLink) {
   const image = thumbnailUrl(offer.imageUrl);
   const link = safeUrl(offer.url);
   const extraCostsUnknown = !offer.shippingKnown || offer.returnCostEur == null;
@@ -47,14 +53,14 @@ function dealRow(offer: NormalizedOffer) {
     + `<strong style="font-size:17px">${eur(offer.effectiveCostEur)}</strong> `
     + `${offer.rrpEur == null ? '' : `<s style="color:#777">${eur(offer.rrpEur)}</s> `}<b style="color:#b00020">−${pct(offer.effectiveDiscountPct)}</b>`
     + `${extraCostsUnknown ? '<br><small style="color:#777">zzgl. ggf. ungeklärter Versand-/Retourenkosten</small>' : ''}`
-    + `${offer.reason ? `<br><small>${esc(offer.reason)}</small>` : ''}</td></tr>`;
+    + `${offer.reason ? `<br><small>${esc(offer.reason)}</small>` : ''}${((anchor) => anchor ? `<br>${anchor.slice(3)}` : '')(hideAnchor(offer, hide))}</td></tr>`;
 }
 
-function nearRow(offer: NormalizedOffer) {
+function nearRow(offer: NormalizedOffer, hide?: HideLink) {
   const link = safeUrl(offer.url);
   const title = `${esc(offer.brand)} ${esc(offer.name)}`;
   return `<li style="margin:0 0 6px">${link ? `<a href="${esc(link)}" style="color:#111">${title}</a>` : title} · ${esc(offer.merchant)} · `
-    + `${eur(offer.effectiveCostEur)} (−${pct(offer.effectiveDiscountPct)}) · Größe: ${esc(sizeText(offer))}`
+    + `${eur(offer.effectiveCostEur)} (−${pct(offer.effectiveDiscountPct)}) · Größe: ${esc(sizeText(offer))}${hideAnchor(offer, hide)}`
     + `${offer.reason ? `<br><small style="color:#777">${esc(offer.reason)}</small>` : ''}</li>`;
 }
 
@@ -72,7 +78,8 @@ function coverageGroups(coverage: SourceCoverage[]) {
       list.map(c => title === 'Mit Deals' ? `${label(c)} (${c.qualifiedOffers})` : title === 'Passende Hosen, aber kein Deal' ? `${label(c)} (${c.eligibleOffers})` : label(c)).join(', ')}</td></tr>`).join('');
 }
 
-export function renderRunEmail(runDate: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport) {
+export function renderRunEmail(runDate: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport,
+  options: { hideLink?: HideLink } = {}) {
   const comparison = report.comparison;
   const metrics = comparison?.metrics.filter(m => ['sourcesWithProducts','rawOffers','normalizedOffers','confirmedSizeOffers','qualifiedDeals','nearMisses','blocked','failed'].includes(m.metric)) || [];
   const labels: Record<string,string> = { sourcesWithProducts:'Shops mit Produkten', rawOffers:'Rohangebote', normalizedOffers:'Verwertbare Angebote', confirmedSizeOffers:'Größe bestätigt', qualifiedDeals:'Rabatt-Deals', nearMisses:'Prüfkandidaten', blocked:'Blockiert', failed:'Fehlgeschlagen' };
@@ -81,8 +88,8 @@ export function renderRunEmail(runDate: string, deals: NormalizedOffer[], near: 
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#202124;line-height:1.4;max-width:640px;margin:auto">`
     + `<h1 style="font-size:20px;margin:0 0 4px">Outdoor Deals · ${esc(runDate)}</h1>`
     + `<p style="margin:0 0 12px;color:#555"><b>${deals.length} Deals</b> · ${near.length} Prüfkandidaten</p>`
-    + `<h2 style="font-size:17px">1. Deals mit Rabattbeleg</h2>${deals.length ? table(deals.map(dealRow).join('')) : '<p><strong>Keine Angebote mit ausreichend belegtem Rabatt in diesem Lauf.</strong></p>'}`
-    + `<h2 style="font-size:17px">Prüfkandidaten</h2>${near.length ? `<ul style="padding-left:18px;font-size:13px">${near.map(nearRow).join('')}</ul>` : '<p>Keine Prüfkandidaten.</p>'}`
+    + `<h2 style="font-size:17px">1. Deals mit Rabattbeleg</h2>${deals.length ? table(deals.map(o => dealRow(o, options.hideLink)).join('')) : '<p><strong>Keine Angebote mit ausreichend belegtem Rabatt in diesem Lauf.</strong></p>'}`
+    + `<h2 style="font-size:17px">Prüfkandidaten</h2>${near.length ? `<ul style="padding-left:18px;font-size:13px">${near.map(o => nearRow(o, options.hideLink)).join('')}</ul>` : '<p>Keine Prüfkandidaten.</p>'}`
     + (comparison ? `<h2 style="font-size:17px">Veränderung zum ${comparison.baselineKind === 'same-day-rerun' ? 'vorigen Bericht von heute' : 'Vortag'}</h2>`
       + `<table cellpadding="4" style="border-collapse:collapse;font-size:13px">${metrics.map(m => `<tr><td>${esc(labels[m.metric] || m.metric)}</td><td align="right">${m.previous ?? '—'}</td><td>→</td><td align="right"><b>${m.current}</b></td><td>(${signed(m.delta)})</td></tr>`).join('')}</table>` : '')
     + `<h2 style="font-size:17px">2. Coverage Report</h2><p style="font-size:12px;color:#555">Zusammenfassung: ${esc(summary)}. Lauf ${esc(report.startedAt)} – ${esc(report.finishedAt)}.</p>`

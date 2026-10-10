@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { NormalizedOffer, RunReport } from './types';
 import { renderRunEmail, renderRunText } from './email-template';
+import { hideLink } from './hidden-offers';
 import { notificationConfig } from './mail-config.mjs';
 import { sendGmailEmail } from './gmail-smtp.mjs';
 
@@ -10,7 +11,7 @@ export type NotificationResult = 'sent' | 'pending' | 'not-configured';
 
 async function submitEmail(runDate: string, snapshotAt: string, deals: NormalizedOffer[], near: NormalizedOffer[], report: RunReport) {
   const subject = `Outdoor Deal Alert ${runDate}${report.comparison?.baselineKind === 'same-day-rerun' ? ' (aktualisiert)' : ''}: ${deals.length} Deals`;
-  const html = renderRunEmail(runDate, deals, near, report);
+  const html = renderRunEmail(runDate, deals, near, report, { hideLink: offer => hideLink(offer) });
   const text = renderRunText(runDate, deals, near, report);
   if (notificationConfig().provider === 'gmail') {
     return sendGmailEmail({ user: process.env.GMAIL_SMTP_USER!, password: process.env.GMAIL_SMTP_APP_PASSWORD!,

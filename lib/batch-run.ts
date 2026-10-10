@@ -8,6 +8,7 @@ import { NormalizedOffer, RunReport, SourceCoverage } from './types';
 import { runByDate, latestRunBefore, saveRun } from './store';
 import { compareCoverage, comparisonBaseline } from './coverage-delta';
 import { sendRunNotification } from './notify';
+import { loadHiddenKeys, withoutHidden } from './hidden-offers';
 import { diagnoseCoverage } from './diagnose';
 import { selectOffers, productEligible, offerKey } from './product-rules.mjs';
 import { fillVerifiedShipping } from './shipping';
@@ -158,7 +159,9 @@ export async function finalizeBatches(runDate = utcDateKey()) {
   const normalized = rows.flatMap((r:any)=>r.offers as NormalizedOffer[]);
   // Reassess persisted candidates at publish time, including batches created
   // before a change to the acceptance rules.
-  const screened=normalized.filter(x=>productEligible(x.name,x.description));
+  // Models the recipient marked "nicht relevant" in an earlier mail stay out.
+  const hidden=await loadHiddenKeys(sql);
+  const screened=withoutHidden(normalized.filter(x=>productEligible(x.name,x.description)),hidden);
   const {deals,near}=selectOffers(screened,PROFILE.minEffectiveDiscountPct);
   const distinct = new Set(screened.map(offerKey));
   const count=(status:string)=>coverage.filter(x=>x.status===status).length;

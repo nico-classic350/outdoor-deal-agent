@@ -56,6 +56,7 @@ No local Chromium or full Playwright browser binaries are bundled into Vercel. O
 - `/` displays evidenced-discount deals, review candidates, source evidence and browser-local saved items.
 - A complete daily run requires a provider-accepted consolidated email with images and full coverage. The mail stays far below Gmail's ~102 KB clipping limit: 72 px thumbnails (small renditions requested from Shopify/imgix), near misses without images, coverage grouped by outcome (technical paths only on the dashboard), plus a text/plain alternative. Production needs `DEAL_NOTIFY_TO` and either `GMAIL_SMTP_USER` plus `GMAIL_SMTP_APP_PASSWORD` for Gmail, or `RESEND_API_KEY` plus `DEAL_NOTIFY_FROM` for a verified sending domain. Missing settings make health and finalizer unhealthy, and the recovery cron retries failed sends from the saved report. No recipient address is hardcoded.
 - Price history on the page uses finalized offer snapshots from up to 30 recent runs.
+- Hidden models: mail rows link to `/api/hide` (signed with an HMAC key derived from `CRON_SECRET`; GET confirms, POST stores in `agent_hidden_offers`). `lib/hidden-offers.ts` keys by model across shops; `finalizeBatches` and the dashboard drop hidden models, and the dashboard lists them with an unhide button.
 
 ## Browserless environment variables
 
